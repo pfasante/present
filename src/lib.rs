@@ -1,145 +1,246 @@
 use std::fmt;
+use std::ops;
 
+/// subkey struct, that holds the roundkey and the additional key bits for one state
+/// of the keyschedule (80 bits alltogether)
 pub struct SubkeyT {
     high : u64,
     low : u16
 }
 
 impl Clone for SubkeyT {
-    fn clone(&self) -> Self
-    {
-        SubkeyT {high: self.high, low: self.low}
+    fn clone(&self) -> Self {
+        SubkeyT::new(self.high, self.low)
     }
 }
 
 impl PartialEq for SubkeyT {
-    fn eq(&self, other: &SubkeyT) -> bool
-    {
+    fn eq(&self, other: &SubkeyT) -> bool {
         (self.high == other.high) && (self.low == other.low)
     }
 }
 
 impl fmt::Display for SubkeyT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subkey State: 0x{:x}, 0x{:x}", self.high, self.low)
+        write!(f, "Subkey: 0x{:x}, 0x{:x}", self.high, self.low)
     }
 }
 
 impl fmt::Debug for SubkeyT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subkey State: 0x{:x}, 0x{:x}", self.high, self.low)
+        write!(f, "Subkey: 0x{:x}, 0x{:x}", self.high, self.low)
     }
 }
 
+impl SubkeyT {
+    pub fn new(high: u64, low: u16) -> Self {
+        SubkeyT {high: high, low: low}
+    }
+
+    pub fn round_key(&self) -> u64 {
+        self.high
+    }
+}
+
+/// key struct, that holds all subkeys
 pub struct KeyT {
     keys: Vec<SubkeyT>
 }
 
-/// the PRESENT state is 64 bit long
-pub struct StateT {
-    state : u64
+impl ops::Index<usize> for KeyT {
+    type Output = SubkeyT;
+    fn index<'a>(&'a self, idx: usize) -> &'a SubkeyT {
+        &self.keys[idx]
+    }
 }
+
+impl KeyT {
+    pub fn new(high: u64, low: u16) -> Self {
+        KeyT {keys: vec!(SubkeyT::new(high, low))}
+    }
+
+    /// for a given key, run the PRESENT keyschedule and return subkeys for n rounds
+    pub fn keyschedule(&mut self, rounds : usize)
+    {
+        // generate rounds + 1 keys, from key[0]
+        for i in 1..(rounds + 1)
+        {
+            // rotate the key register by 61 bit positions to the left
+            // or rotate the key register by 19 bit positions to the right
+            let mut low = (((*self)[i - 1].high >> 3) & 0xffff) as u16;
+            let mut high = ((*self)[i - 1].high >> 19) |
+                           (((*self)[i - 1].low as u64) << 45) |
+                           (((*self)[i - 1].high & 0b111) << 61);
+            // pass the leftmost nibble through the sbox
+            high = (high & 0x0fff_ffff_ffff_ffff) |
+                   ((present_sbox().look_up_byte((high >> 60) as u8) as u64) << 60);
+            // xor the round_counter to bits 19-15
+            low = low ^ (((i & 0b1) << 15) as u16);
+            high = high ^ ((i >> 1) as u64);
+            (*self).keys.push(SubkeyT::new(high, low));
+        }
+    }
+}
+
+/// sbox struct, implements methods for look up
+/// can be constructed with the present_sbox function
+pub struct SboxT {
+    s : [u8; 16]
+}
+
+/// sbox look up, use only lower nibble of idx and return 0x0 in the higher nibble
+impl ops::Index<usize> for SboxT {
+    type Output = u8;
+    fn index<'a>(&'a self, idx: usize) -> &'a u8 {
+        &self.s[idx & 0xf]
+    }
+}
+
+impl SboxT {
+    fn new(ary: [u8; 16]) -> Self {
+        SboxT {s: ary}
+    }
+
+    /// sbox look up, use both nibbles of idx (i.e. performs two sbox lookups)
+    pub fn look_up_byte(&self, idx: u8) -> u8 {
+        let lsb = self.s[idx as usize];
+        let msb = self.s[(idx >> 4) as usize] << 4;
+        msb | lsb
+    }
+
+    /// sbox look up, use both nibbles of idx (i.e. performs two sbox lookups)
+    pub fn look_up_state(&self, idx: u64) -> u64 {
+        let mut output = 0;
+        output |= (self.look_up_byte(((idx >> 56) & 0xff) as u8) as u64) << 56;
+        output |= (self.look_up_byte(((idx >> 48) & 0xff) as u8) as u64) << 48;
+        output |= (self.look_up_byte(((idx >> 40) & 0xff) as u8) as u64) << 40;
+        output |= (self.look_up_byte(((idx >> 32) & 0xff) as u8) as u64) << 32;
+        output |= (self.look_up_byte(((idx >> 24) & 0xff) as u8) as u64) << 24;
+        output |= (self.look_up_byte(((idx >> 16) & 0xff) as u8) as u64) << 16;
+        output |= (self.look_up_byte(((idx >>  8) & 0xff) as u8) as u64) <<  8;
+        output |  (self.look_up_byte(((idx >>  0) & 0xff) as u8) as u64) <<  0
+    }
+
+    /// compute the walsh transformation of the sbox and return it as a
+    /// one row of the linear approximation table
+    fn walsh_transform_row(&self, beta: u8) -> [i32; 16] {
+        // TODO fix
+        let mut row = [0; 16];
+        // initialize the row array
+        for i in 0..16 {
+            row[i] =(-1i32).pow(dot_product_f2(beta, self[i as usize]) as u32);
+        }
+        let mut step = 1;
+        while step < 16 {
+            let mut left = 0;
+            let blocks = 16 / (step * 2);
+            for _ in 0..blocks {
+                let mut right = left + step;
+                for _ in 0..step {
+                    let a = row[left as usize];
+                    let b = row[right as usize];
+                    row[left as usize] = a + b;
+                    row[right as usize] = a - b;
+                    left += 1;
+                    right += 1;
+                }
+                left = right;
+            }
+            step *= 2;
+        }
+        // scale row by 0.5, we want to compute biases
+        for i in 0..16 {
+            row[i] /= 2;
+        }
+        // return it
+        row
+    }
+
+    /// compute the walsh transformation of the sbox and return it as a
+    /// linear approximation table
+    pub fn walsh_transform(&self) -> LAT {
+        let mut lat = LAT::new();
+        for i in 0..16 {
+            lat.table[i] = self.walsh_transform_row(i as u8);
+        }
+        lat
+    }
+}
+
+fn dot_product_f2(a: u8, b: u8) -> u8 {
+    let mut x = 0;
+    for i in 0..8 {
+        x ^= ((a >> i) & 1) * ((b >> i) & 1);
+    }
+    x
+}
+
+/// returns the PRESENT sbox
+pub fn present_sbox() -> SboxT {
+    SboxT::new([0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
+                0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2])
+}
+
+pub struct LAT {
+    table: [[i32; 16]; 16]
+}
+
+impl fmt::Display for LAT {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut res = write!(f, "LAT:");
+        for i in 0..16 {
+            for j in 0..16 {
+                res = res.and(write!(f, "{} ", self.table[i][j]))
+            }
+            res = res.and(write!(f, "\n"));
+        }
+        res
+    }
+}
+
+impl LAT {
+    fn new() -> LAT {
+        LAT {table: [[0; 16]; 16]}
+    }
+}
+
+/// the state struct, holding the PRESENT state (64 bit) and implements
+/// each layer
+pub struct StateT(u64);
 
 impl fmt::Display for StateT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "State: 0x{:x}", self.state)
+        let StateT(state) = *self;
+        write!(f, "State: 0x{:x}", state)
     }
 }
 
-/// returns s(input), where s is the PRESENT sbox
-/// and s is applied to both, only the left (msb) or only the right (lsb) nibble
-///
-/// # Example
-///
-/// ```
-/// assert_eq!(present::sbox_both(0xf0), 0x2c);
-/// assert_eq!(present::sbox_msb(0xf0), 0x20);
-/// assert_eq!(present::sbox_lsb(0xf0), 0xfc);
-/// ```
-pub fn sbox_both(input : u8) -> u8
-{
-    let s = [0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
-             0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
-
-    s[(input & 0xf) as usize] | (s[(input >> 4) as usize] << 4)
-}
-pub fn sbox_msb(input : u8) -> u8
-{
-    let s = [0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
-             0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
-
-    (input & 0xf) | (s[(input >> 4) as usize] << 4)
-}
-pub fn sbox_lsb(input : u8) -> u8
-{
-    let s = [0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
-             0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
-
-    s[(input & 0xf) as usize] | (input & 0xf0)
-}
-
-/// for a given key, run the PRESENT keyschedule and return subkeys for n rounds
-pub fn keyschedule(key : &mut KeyT, rounds : usize)
-{
-    // generate rounds + 1 keys, from key[0]
-    let mut high;
-    let mut low;
-    for i in 1..(rounds + 1)
-    {
-        // rotate the key register by 61 bit positions to the left
-        // or rotate the key register by 19 bit positions to the right
-        low = (((*key).keys[i - 1].high >> 3) & 0xffff) as u16;
-        high = ((*key).keys[i - 1].high >> 19) |
-               (((*key).keys[i - 1].low as u64) << 45) |
-               (((*key).keys[i - 1].high & 0b111) << 61);
-        // pass the leftmost nibble through the sbox
-        high = (high & 0x0fff_ffff_ffff_ffff) | ((sbox_lsb((high >> 60) as u8) as u64) << 60);
-        // xor the round_counter to bits 19-15
-        low = low ^ (((i & 0b1) << 15) as u16);
-        high = high ^ ((i >> 1) as u64);
-        (*key).keys.push(SubkeyT {high: high, low: low});
+impl StateT {
+    fn kxor_layer(&self, key: &KeyT, round: usize) -> Self {
+        let StateT(in_state) = *self;
+        StateT(in_state ^ key[round].round_key())
     }
-}
 
-#[cfg(test)]
-mod test {
-    use super::{SubkeyT, KeyT, keyschedule};
+    fn sbox_layer(&self) -> Self {
+        let StateT(in_state) = *self;
+        StateT(present_sbox().look_up_state(in_state))
+    }
 
-    #[test]
-    fn test_keyschedule()
-    {
-        let mut k = KeyT {keys: vec!(SubkeyT {high: 0x0, low: 0x0})};
-        keyschedule(&mut k, 31);
-        assert_eq!(SubkeyT {high: 0x0000000000000000, low: 0x0000}, k.keys[0]);
-        assert_eq!(SubkeyT {high: 0xc000000000000000, low: 0x8000}, k.keys[1]);
-        assert_eq!(SubkeyT {high: 0x5000180000000001, low: 0x0000}, k.keys[2]);
-        assert_eq!(SubkeyT {high: 0x60000a0003000001, low: 0x8000}, k.keys[3]);
-        assert_eq!(SubkeyT {high: 0xb0000c0001400062, low: 0x0000}, k.keys[4]);
-        assert_eq!(SubkeyT {high: 0x900016000180002a, low: 0x800c}, k.keys[5]);
-        assert_eq!(SubkeyT {high: 0x0001920002c00033, low: 0x0005}, k.keys[6]);
-        assert_eq!(SubkeyT {high: 0xa000a0003240005b, low: 0x8006}, k.keys[7]);
-        assert_eq!(SubkeyT {high: 0xd000d4001400064c, low: 0x000b}, k.keys[8]);
-        assert_eq!(SubkeyT {high: 0x30017a001a800284, low: 0x80c9}, k.keys[9]);
-        assert_eq!(SubkeyT {high: 0xe01926002f400355, low: 0x0050}, k.keys[10]);
-        assert_eq!(SubkeyT {high: 0xf00a1c0324c005ed, low: 0x806a}, k.keys[11]);
-        assert_eq!(SubkeyT {high: 0x800d5e014380649e, low: 0x00bd}, k.keys[12]);
-        assert_eq!(SubkeyT {high: 0x4017b001abc02876, low: 0x8c93}, k.keys[13]);
-        assert_eq!(SubkeyT {high: 0x71926802f600357f, low: 0x050e}, k.keys[14]);
-        assert_eq!(SubkeyT {high: 0x10a1ce324d005ec7, low: 0x86af}, k.keys[15]);
-        assert_eq!(SubkeyT {high: 0x20d5e21439c649a8, low: 0x0bd8}, k.keys[16]);
-        assert_eq!(SubkeyT {high: 0xc17b041abc428730, low: 0x4935}, k.keys[17]);
-        assert_eq!(SubkeyT {high: 0xc926b82f60835781, low: 0x50e6}, k.keys[18]);
-        assert_eq!(SubkeyT {high: 0x6a1cd924d705ec19, low: 0xeaf0}, k.keys[19]);
-        assert_eq!(SubkeyT {high: 0xbd5e0d439b249aea, low: 0xbd83}, k.keys[20]);
-        assert_eq!(SubkeyT {high: 0x07b077abc1a8736e, low: 0x135d}, k.keys[21]);
-        assert_eq!(SubkeyT {high: 0x426ba0f60ef5783e, low: 0x0e6d}, k.keys[22]);
-        assert_eq!(SubkeyT {high: 0x41cda84d741ec1d5, low: 0x2f07}, k.keys[23]);
-        assert_eq!(SubkeyT {high: 0xf5e0e839b509ae8f, low: 0xd83a}, k.keys[24]);
-        assert_eq!(SubkeyT {high: 0x2b075ebc1d0736ad, low: 0xb5d1}, k.keys[25]);
-        assert_eq!(SubkeyT {high: 0x86ba2560ebd783ad, low: 0xe6d5}, k.keys[26]);
-        assert_eq!(SubkeyT {high: 0x8cdab0d744ac1d77, low: 0x7075}, k.keys[27]);
-        assert_eq!(SubkeyT {high: 0x1e0eb19b561ae89b, low: 0x83ae}, k.keys[28]);
-        assert_eq!(SubkeyT {high: 0xd075c3c1d6336acd, low: 0xdd13}, k.keys[29]);
-        assert_eq!(SubkeyT {high: 0x8ba27a0eb8783ac9, low: 0x6d59}, k.keys[30]);
+    fn perm_layer(&self) -> Self {
+        let StateT(in_state) = *self;
+        let mut perm_state = 0;
+        for j in 0..16 {
+            for i in 0..4 {
+                let old_idx = j *  4 + i;
+                let new_idx = i * 16 + j;
+                perm_state |= (in_state >> old_idx & 0x1) << new_idx;
+            }
+        }
+        StateT(perm_state)
+    }
+
+    /// computes one PRESENT round
+    pub fn round(&self, key : &KeyT, round: usize) -> Self {
+        self.kxor_layer(key, round).sbox_layer().perm_layer()
     }
 }
