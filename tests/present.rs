@@ -2,8 +2,7 @@ extern crate linc;
 use linc::present::*;
 
 #[test]
-fn test_keyschedule()
-{
+fn test_keyschedule() {
     let k = KeyT::new(0x0, 0x0, 31);
     assert_eq!(SubkeyT::new(0x0000000000000000, 0x0000), k[0]);
     assert_eq!(SubkeyT::new(0xc000000000000000, 0x8000), k[1]);
@@ -36,5 +35,17 @@ fn test_keyschedule()
     assert_eq!(SubkeyT::new(0x1e0eb19b561ae89b, 0x83ae), k[28]);
     assert_eq!(SubkeyT::new(0xd075c3c1d6336acd, 0xdd13), k[29]);
     assert_eq!(SubkeyT::new(0x8ba27a0eb8783ac9, 0x6d59), k[30]);
+}
+
+#[test]
+fn test_encryption() {
+    let c = enc(0x0, CipherKeyT(0x0, 0x0), 31);
+    assert_eq!(0x5579c138_7b228445, c);
+    let c = enc(0x0, CipherKeyT(0xffffffff_ffffffff, 0xffff), 31);
+    assert_eq!(0xe72c46c0_f5945049, c);
+    let c = enc(0xffffffff_ffffffff, CipherKeyT(0x0, 0x0), 31);
+    assert_eq!(0xa112ffc7_2f68417b, c);
+    let c = enc(0xffffffff_ffffffff, CipherKeyT(0xffffffff_ffffffff, 0xffff), 31);
+    assert_eq!(0x3333dcd3_213210d2, c);
 }
 

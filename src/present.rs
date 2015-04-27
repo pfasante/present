@@ -3,8 +3,10 @@ use sbox::*;
 use std::fmt;
 use std::ops;
 
-/// subkey struct, that holds the roundkey and the additional key bits for one state
-/// of the keyschedule (80 bits alltogether)
+pub struct CipherKeyT(pub u64, pub u16);
+
+/// subkey struct, that holds the roundkey and the additional
+/// key bits for one state of the keyschedule (80 bits alltogether)
 pub struct SubkeyT {
     high : u64,
     low : u16
@@ -16,6 +18,7 @@ impl Clone for SubkeyT {
     }
 }
 
+// needed for assert_eq!
 impl PartialEq for SubkeyT {
     fn eq(&self, other: &SubkeyT) -> bool {
         (self.high == other.high) && (self.low == other.low)
@@ -28,6 +31,7 @@ impl fmt::Display for SubkeyT {
     }
 }
 
+// needed for assert_eq!
 impl fmt::Debug for SubkeyT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Subkey: 0x{:x}, 0x{:x}", self.high, self.low)
@@ -97,7 +101,24 @@ pub fn present_sbox() -> SboxT {
 /// each layer
 pub struct StateT(u64);
 
+// needed for assert_eq!
+impl PartialEq for StateT {
+    fn eq(&self, other: &StateT) -> bool {
+        let StateT(state) = *self;
+        let StateT(other_state) = *other;
+        (state == other_state)
+    }
+}
+
 impl fmt::Display for StateT {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let StateT(state) = *self;
+        write!(f, "State: 0x{:x}", state)
+    }
+}
+
+// needed for assert_eq!
+impl fmt::Debug for StateT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let StateT(state) = *self;
         write!(f, "State: 0x{:x}", state)
@@ -137,3 +158,16 @@ impl StateT {
         self.kxor_layer(key, round).sbox_layer().perm_layer()
     }
 }
+
+pub fn enc(m: u64, key: CipherKeyT, rounds: usize) -> u64 {
+    let CipherKeyT(high, low) = key;
+    let k = KeyT::new(high, low, rounds);
+    let mut s = StateT::new(m);
+    for i in 0..rounds {
+        s = s.round(&k, i);
+    }
+    s = s.kxor_layer(&k, rounds);
+    let StateT(c) = s;
+    c
+}
+
