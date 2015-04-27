@@ -101,10 +101,21 @@ pub struct LAT {
 
 impl fmt::Display for LAT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut res = write!(f, "LAT:");
-        for i in 0..16 {
-            for j in 0..16 {
-                res = res.and(write!(f, "{} ", self.table[i][j]))
+        let mut res = write!(f, "LAT:\n");
+        for i in 0..17 {
+            for j in 0..17 {
+                res = res.and(
+                    if i == 0 && j == 0 {
+                        write!(f, "   ")
+                    } else if i == 0 {
+                        write!(f, "{:>2} ", j-1)
+                    } else if j == 0 {
+                        write!(f, "{:>2} ", i-1)
+                    } else if self.table[j-1][i-1] != 0 {
+                        write!(f, "{:>2} ", self.table[j-1][i-1])
+                    } else {
+                        write!(f, "   ")
+                    });
             }
             res = res.and(write!(f, "\n"));
         }

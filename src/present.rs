@@ -96,7 +96,6 @@ pub fn present_sbox() -> SboxT {
                 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2])
 }
 
-
 /// the state struct, holding the PRESENT state (64 bit) and implements
 /// each layer
 pub struct StateT(u64);
