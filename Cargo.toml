@@ -2,3 +2,12 @@
 name = "present"
 version = "0.0.1"
 authors = ["Friedrich Wiemer <friedrich.wiemer@rub.de>"]
+
+[lib]
+name = "linc"
+path = "src/linc.rs"
+
+[[bin]]
+name = "present"
+path = "src/main.rs"
+

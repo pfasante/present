@@ -1,11 +1,10 @@
-extern crate present;
-use present::*;
+extern crate linc;
+use linc::present::*;
 
 #[test]
 fn test_keyschedule()
 {
-    let mut k = KeyT::new(0x0, 0x0);
-    k.keyschedule(31);
+    let k = KeyT::new(0x0, 0x0, 31);
     assert_eq!(SubkeyT::new(0x0000000000000000, 0x0000), k[0]);
     assert_eq!(SubkeyT::new(0xc000000000000000, 0x8000), k[1]);
     assert_eq!(SubkeyT::new(0x5000180000000001, 0x0000), k[2]);
