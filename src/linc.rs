@@ -9,16 +9,13 @@
 //! the present module contains implementations of these traits for the PRESENT
 //! cipher.
 
-#![feature(core)]
-#![feature(custom_derive)]
-
 pub mod present;
 
 extern crate num;
 
+use num::traits::PrimInt;
 use std::fmt;
-use std::num::Int;
-use std::ops::{Index, BitAnd, BitXor, Mul, Shr};
+use std::ops::Index;
 
 pub trait Sbox<T>: Index<usize> {
     fn new() -> Self;
@@ -98,7 +95,7 @@ where S: Sbox<T> + Index<usize, Output=usize> {
 }
 
 fn dot_prod_f2<T>(a: T, b: T) -> T 
-where T: Int + BitAnd + BitXor<T> + Mul + Shr<usize, Output=T> {
+where T: PrimInt {
     let n = (a.count_ones() + a.count_zeros()) as usize;
     assert!(n == (b.count_ones() + b.count_zeros()) as usize,
                "a and b does not have same bitlength?!");
