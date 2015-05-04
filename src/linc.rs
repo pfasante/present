@@ -14,6 +14,8 @@
 
 pub mod present;
 
+extern crate num;
+
 use std::fmt;
 use std::num::Int;
 use std::ops::{Index, BitAnd, BitXor, Mul, Shr};

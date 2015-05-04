@@ -9,6 +9,7 @@ description = "Collection of Linear Cryptanalysis functions and example implemen
 
 [dependencies]
 generic-matrix = "*"
+num = "*"
 
 [lib]
 name = "linc"
