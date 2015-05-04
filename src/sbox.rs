@@ -1,7 +1,9 @@
 //! TODO add sbox module documentation
+extern crate generic_matrix as matrix;
 
 use std::fmt;
 use std::ops;
+use std::iter;
 
 /// sbox struct, implements methods for look up
 /// can be constructed with the present_sbox function
@@ -45,7 +47,7 @@ impl SboxT {
     /// compute the walsh transformation of the sbox and return it as a
     /// one row of the linear approximation table
     fn walsh_transform_row(&self, beta: u8) -> [i32; 16] {
-        // TODO fix
+        // TODO fix, so that transform work on arbitrary length arrays
         let mut row = [0; 16];
         // initialize the row array
         for i in 0..16 {
@@ -76,8 +78,8 @@ impl SboxT {
         row
     }
 
-    /// compute the walsh transformation of the sbox and return it as a
-    /// linear approximation table
+    /// compute the walsh transformation of the sbox and
+    /// return it as a linear approximation table
     pub fn walsh_transform(&self) -> LAT {
         let mut lat = LAT::new();
         for i in 0..16 {
@@ -97,6 +99,13 @@ fn dot_product_f2(a: u8, b: u8) -> u8 {
 
 pub struct LAT {
     table: [[i32; 16]; 16]
+}
+
+impl ops::Index<usize> for LAT {
+    type Output = [i32];
+    fn index<'a>(&'a self, idx: usize) -> &'a [i32] {
+        &self.table[idx]
+    }
 }
 
 impl fmt::Display for LAT {
@@ -128,3 +137,43 @@ impl LAT {
         LAT {table: [[0; 16]; 16]}
     }
 }
+
+pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
+    let mut biased_masks = Vec::new();
+    for &i in [1, 2, 4, 8].iter() {
+        for &j in [1, 2, 4, 8].iter() {
+            if (*lat)[j][i] != 0 {
+                biased_masks.push((i, j, (*lat)[j][i]));
+            }
+        }
+    }
+    biased_masks
+}
+
+/*
+impl<T> ops::IndexMut<(usize, usize)> for matrix::Matrix<T> {
+    #[inline]
+    fn index_mut(&mut self, (i, j): (usize, usize)) -> &mut T {
+        assert!(i < self.row() && j < self.column());
+        &mut self.data[i * self.column() + j]
+    }
+}
+
+pub fn one_bit_bias_adjacency_matrix(lat: &LAT) -> matrix::Matrix<u64> {
+    let mut m = matrix::Matrix::zero(64, 64);
+    let biased_mask = biased_one_bit(lat);
+
+    for i in 0..64 {
+        for (a, b, _) in biased_mask {
+            let active_sbox = i / 4;
+            if a == 2u64.pow(i % 4) as usize {
+                let idx = b.trailing_zeros() + active_sbox * 4;
+                let c = (idx % 4) * 16 + idx / 4;
+                m[(i as usize, c as usize)] = 2;
+            }
+        }
+    }
+
+    m
+}
+*/
