@@ -1,16 +1,14 @@
 extern crate linc;
 use linc::present::*;
-use linc::sbox::*;
+use linc::*;
 
 fn main() {
-    let lat = present_sbox().walsh_transform();
+    let sbox = PresentSbox::new();
+    let lat = walsh_transform(&sbox);
     println!("PRESENT sbox {}", lat);
     let biased_masks = biased_one_bit(&lat);
 
-    print!("biased masks");
-    for (alpha, beta, bias) in biased_masks {
-        print!(" ({}, {}, {})", alpha, beta, bias);
-    }
+    print!("biased masks {:?}", biased_masks);
     println!("");
 }
 

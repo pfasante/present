@@ -1,172 +1,189 @@
-use sbox::*;
-
-use std::fmt;
+use super::*;
 use std::ops;
 
-pub struct CipherKeyT(pub u64, pub u16);
-
-/// subkey struct, that holds the roundkey and the additional
-/// key bits for one state of the keyschedule (80 bits alltogether)
-pub struct SubkeyT {
-    high : u64,
-    low : u16
+/// PresentSbox implements the PRESENT sbox, by implementing the Sbox trait
+/// a Sbox lookup can than be accomplished by indexing the sbox.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentSbox {
+    size: usize,
+    elems: Vec<usize>
 }
 
-impl Clone for SubkeyT {
-    fn clone(&self) -> Self {
-        SubkeyT::new(self.high, self.low)
+/// sbox lookup, ignores the higher nibble (returns 0x0 in it)
+impl ops::Index<usize> for PresentSbox {
+    type Output = usize;
+    fn index<'a>(&'a self, idx: usize) -> &'a usize {
+        &self.elems[idx & 0xf]
     }
 }
 
-// needed for assert_eq!
-impl PartialEq for SubkeyT {
-    fn eq(&self, other: &SubkeyT) -> bool {
-        (self.high == other.high) && (self.low == other.low)
+impl Sbox<u64> for PresentSbox {
+    fn new() -> Self {
+        PresentSbox {size: 16, elems:
+            vec![0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
+                 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2]}
+    }
+
+    fn length(&self) -> usize {
+        self.size
+    }
+
+    fn lookup_state(&self, in_state: u64) -> u64 {
+        let mut out_state = 0;
+        for i in 0..16 {
+            let lookup = self[((in_state >> (i * 4)) & 0xf) as usize] as u64;
+            out_state |= lookup << (i * 4);
+        }
+        out_state
     }
 }
 
-impl fmt::Display for SubkeyT {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subkey: 0x{:x}, 0x{:x}", self.high, self.low)
+/// present permutation
+/// TODO missing Fn Trait implementation to permute whole present state
+pub struct PresentPermutation {
+    // FIXME hack for Index implementation
+    idx: Vec<usize>
+}
+
+// FIXME hack for Index implementation
+impl PresentPermutation {
+    fn new() -> Self {
+        let mut v = Vec::new();
+        for i in 0..64 {
+            v.push(i);
+        }
+        PresentPermutation {idx: v}
     }
 }
 
-// needed for assert_eq!
-impl fmt::Debug for SubkeyT {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subkey: 0x{:x}, 0x{:x}", self.high, self.low)
+impl ops::Index<usize> for PresentPermutation {
+    type Output = usize;
+    fn index<'a>(&'a self, idx: usize) -> &'a usize {
+        assert!(idx < 64, "index out of range");
+        // TODO hack: how to return the computed index without
+        // using this dumb vector referencing?
+        &self.idx[(idx % 5) * 16 + (idx / 4)]
     }
 }
 
-impl SubkeyT {
+impl BitPerm for PresentPermutation {}
+
+/// PresentCipherKey is the initial 80bit key
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentCipherKey {
+    high: u64,
+    low: u16
+}
+
+impl PresentCipherKey {
     pub fn new(high: u64, low: u16) -> Self {
-        SubkeyT {high: high, low: low}
-    }
-
-    pub fn round_key(&self) -> u64 {
-        self.high
+        PresentCipherKey {high: high, low: low}
     }
 }
 
-/// key struct, that holds all subkeys
-pub struct KeyT {
-    keys: Vec<SubkeyT>
+/// PresentRoundKey is a 64bit round key
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentRoundKey {
+    key: u64
 }
 
-impl ops::Index<usize> for KeyT {
-    type Output = SubkeyT;
-    fn index<'a>(&'a self, idx: usize) -> &'a SubkeyT {
-        &self.keys[idx]
+impl PresentRoundKey {
+    pub fn new(k: u64) -> Self {
+        PresentRoundKey {key: k}
     }
 }
 
-impl KeyT {
-    pub fn new(high: u64, low: u16, rounds: usize) -> Self {
-        let mut k = KeyT {keys: vec!(SubkeyT::new(high, low))};
-        k.keyschedule(rounds);
-        k
-    }
+pub struct PresentKeySchedule {
+    size: usize,
+    elems: Vec<PresentRoundKey>
+}
 
-    /// for a given key, run the PRESENT keyschedule and return subkeys for n rounds
-    fn keyschedule(&mut self, rounds: usize)
-    {
-        // generate rounds + 1 keys, from key[0]
-        for i in 1..(rounds + 1)
-        {
+impl ops::Index<usize> for PresentKeySchedule {
+    type Output = PresentRoundKey;
+    fn index<'a>(&'a self, idx: usize) -> &'a PresentRoundKey {
+        assert!(idx < self.size, "index out of range");
+        &self.elems[idx]
+    }
+}
+
+impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentKeySchedule {
+    fn new(key: PresentCipherKey, rounds: usize) -> Self {
+        let sbox = PresentSbox::new();
+        let mut keys = vec![PresentRoundKey {key: key.high}];
+
+        // run keyschedule
+        let mut old_low = key.low;
+        let mut old_high = key.high;
+        for i in 1..(rounds + 1) {
+
             // rotate the key register by 61 bit positions to the left
             // or rotate the key register by 19 bit positions to the right
-            let mut low = (((*self)[i - 1].high >> 3) & 0xffff) as u16;
-            let mut high = ((*self)[i - 1].high >> 19) |
-                           (((*self)[i - 1].low as u64) << 45) |
-                           (((*self)[i - 1].high & 0b111) << 61);
+            let mut low = ((old_high >> 3) & 0xffff) as u16;
+            let mut high = (old_high >> 19)
+                 | ((old_low as u64) << 45)
+                 | ((old_high & 0b111) << 61);
+
             // pass the leftmost nibble through the sbox
             high = (high & 0x0fff_ffff_ffff_ffff) |
-                   ((present_sbox().look_up_byte((high >> 60) as u8) as u64) << 60);
+                   ((sbox[(high >> 60) as usize] as u64) << 60);
+
             // xor the round_counter to bits 19-15
             low = low ^ (((i & 0b1) << 15) as u16);
             high = high ^ ((i >> 1) as u64);
-            (*self).keys.push(SubkeyT::new(high, low));
+
+            old_low = low;
+            old_high = high;
+            keys.push(PresentRoundKey {key: high});
         }
+        PresentKeySchedule {size: rounds + 1, elems: keys}
     }
 }
 
-/// returns the PRESENT sbox
-pub fn present_sbox() -> SboxT {
-    SboxT::new([0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
-                0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2])
+/// Present implements the Cipher Trait, to tie everything together
+pub struct Present {
+    state: u64,
+    sbox: PresentSbox,
+    perm: PresentPermutation,
+    keys: PresentKeySchedule
 }
 
-/// the state struct, holding the PRESENT state (64 bit) and implements
-/// each layer
-pub struct StateT(u64);
-
-// needed for assert_eq!
-impl PartialEq for StateT {
-    fn eq(&self, other: &StateT) -> bool {
-        let StateT(state) = *self;
-        let StateT(other_state) = *other;
-        (state == other_state)
-    }
-}
-
-impl fmt::Display for StateT {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let StateT(state) = *self;
-        write!(f, "State: 0x{:x}", state)
-    }
-}
-
-// needed for assert_eq!
-impl fmt::Debug for StateT {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let StateT(state) = *self;
-        write!(f, "State: 0x{:x}", state)
+impl Cipher<u64, PresentCipherKey> for Present {
+    fn enc(init: u64, key: PresentCipherKey, rounds: usize) -> u64 {
+        let s = PresentSbox::new();
+        let b = PresentPermutation::new();
+        let k = PresentKeySchedule::new(key, rounds);
+        let mut c = Present {state: init, sbox: s, perm: b, keys: k};
+        
+        for i in 0..rounds {
+            c.kxor_layer(i);
+            c.sbox_layer();
+            c.perm_layer();
+        }
+        c.kxor_layer(rounds);
+        c.state
     }
 }
 
-impl StateT {
-    pub fn new(s: u64) -> StateT {
-        StateT(s)
+impl Present {
+    fn kxor_layer(&mut self, round: usize) {
+        self.state = self.keys[round].key ^ self.state;
     }
 
-    pub fn kxor_layer(&self, key: &KeyT, round: usize) -> Self {
-        let StateT(in_state) = *self;
-        StateT(in_state ^ key[round].round_key())
+    fn sbox_layer(&mut self) {
+        self.state = self.sbox.lookup_state(self.state);
     }
 
-    fn sbox_layer(&self) -> Self {
-        let StateT(in_state) = *self;
-        StateT(present_sbox().look_up_state(in_state))
-    }
-
-    fn perm_layer(&self) -> Self {
-        let StateT(in_state) = *self;
+    fn perm_layer(&mut self) {
+        //self.state = self.perm(self.state);
         let mut perm_state = 0;
         for j in 0..16 {
             for i in 0..4 {
                 let old_idx = j *  4 + i;
                 let new_idx = i * 16 + j;
-                perm_state |= (in_state >> old_idx & 0x1) << new_idx;
+                perm_state |= (self.state >> old_idx & 0x1) << new_idx;
             }
         }
-        StateT(perm_state)
+        self.state = perm_state;
     }
-
-    /// computes one PRESENT round
-    pub fn round(&self, key : &KeyT, round: usize) -> Self {
-        self.kxor_layer(key, round).sbox_layer().perm_layer()
-    }
-}
-
-pub fn enc(m: u64, key: CipherKeyT, rounds: usize) -> u64 {
-    let CipherKeyT(high, low) = key;
-    let k = KeyT::new(high, low, rounds);
-    let mut s = StateT::new(m);
-    for i in 0..rounds {
-        s = s.round(&k, i);
-    }
-    s = s.kxor_layer(&k, rounds);
-    let StateT(c) = s;
-    c
 }
 
