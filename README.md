@@ -1,6 +1,10 @@
-TODO
-====
+LINear Cryptanalysis library
+============================
 
-everything :)
-get an overview first
+[![Build Status](https://travis-ci.org/pfasante/present.svg?branch=master)](https://travis-ci.org/pfasante/present)
+
+TODO
+----
+
+almost everything
 
