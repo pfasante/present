@@ -19,7 +19,7 @@ use std::ops::Index;
 
 pub trait Sbox<T>: Index<usize> {
     fn new() -> Self;
-    fn length(&self) -> usize;
+    fn len(&self) -> usize;
     fn lookup_state(&self, in_state: T) -> T; 
     // could be substituted by call(&self, in_state: T)
     //fn index(i: usize) -> T;
@@ -44,7 +44,7 @@ pub trait Cipher<T, C> {
 /// compute the walsh transformation of the given sbox, return it as a LAT
 pub fn walsh_transform<T, S>(s: &S) -> LAT
 where S: Sbox<T> + Index<usize, Output=usize> {
-    let range = s.length();
+    let range = s.len();
     let mut lat = LAT::new();
     for i in 0..range {
         let row = walsh_transform_row(s, i);
@@ -63,7 +63,7 @@ where S: Sbox<T> + Index<usize, Output=usize> {
 
 fn walsh_transform_row<T, S>(s: &S, beta: usize) -> Vec<i32>
 where S: Sbox<T> + Index<usize, Output=usize> {
-    let range = s.length();
+    let range = s.len();
     let mut row = Vec::new();
     // initialize the row
     for i in 0..range {

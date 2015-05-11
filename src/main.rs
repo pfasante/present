@@ -8,7 +8,6 @@ fn main() {
     println!("PRESENT sbox {}", lat);
     let biased_masks = biased_one_bit(&lat);
 
-    print!("biased masks {:?}", biased_masks);
-    println!("");
+    println!("biased masks {:?}", biased_masks);
 }
 

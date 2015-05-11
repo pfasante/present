@@ -24,7 +24,7 @@ impl Sbox<u64> for PresentSbox {
                  0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2]}
     }
 
-    fn length(&self) -> usize {
+    fn len(&self) -> usize {
         self.size
     }
 
