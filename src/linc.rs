@@ -11,8 +11,10 @@
 
 pub mod present;
 
+extern crate generic_matrix;
 extern crate num;
 
+use generic_matrix::Matrix;
 use num::traits::PrimInt;
 use std::fmt;
 use std::ops::Index;
@@ -20,12 +22,12 @@ use std::ops::Index;
 pub trait Sbox<T>: Index<usize> {
     fn new() -> Self;
     fn len(&self) -> usize;
-    fn lookup_state(&self, in_state: T) -> T; 
+    fn lookup_state(&self, in_state: T) -> T;
     // could be substituted by call(&self, in_state: T)
     //fn index(i: usize) -> T;
 }
 
-pub trait BitPerm: Index<usize> {
+pub trait BitPerm: Index<usize, Output=usize> {
     //fn index(i: usize) -> T;
     //fn call(&self, in_state: T) -> T;
 }
@@ -37,8 +39,11 @@ pub trait KeySchedule<T, U>: Index<usize, Output=U> {
 }
 
 /// the ciphers State is generic over the inital state and the ciphers key
-pub trait Cipher<T, C> {
+pub trait Cipher<T, C, S: Sbox<T>, P: BitPerm> {
     fn enc(init: T, cipher_key: C, rounds: usize) -> u64;
+    fn state_size() -> usize;
+    fn sbox() -> &'static S;
+    fn permutation() -> &'static P;
 }
 
 /// compute the walsh transformation of the given sbox, return it as a LAT
@@ -94,7 +99,7 @@ where S: Sbox<T> + Index<usize, Output=usize> {
     row
 }
 
-fn dot_prod_f2<T>(a: T, b: T) -> T 
+fn dot_prod_f2<T>(a: T, b: T) -> T
 where T: PrimInt {
     let n = (a.count_ones() + a.count_zeros()) as usize;
     assert!(n == (b.count_ones() + b.count_zeros()) as usize,
@@ -168,5 +173,42 @@ pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
         i *= 2;
     }
     biased_masks
+}
+
+pub fn number_one_bit_trails<T, U, V, S, P>(rounds: usize) -> Matrix<u64>
+where
+    S: 'static + Sbox<U> + Index<usize, Output=usize>,
+    P: 'static + BitPerm,
+    T: Cipher<U, V, S, P>
+{
+    // state is an adjacency-matrix for the ciphers state,
+    // it has edges for every one bit trail of the ciphers sbox
+    let mut state = Matrix::zero(T::state_size(), T::state_size());
+    for i in 0..T::state_size() {
+        for (a, b, _) in biased_one_bit(&walsh_transform(T::sbox())) {
+            let active_sbox = i as usize / 4;
+            if a == 2.pow(i as u32 % 4) {
+                let idx = ((b as f64).log(2.0) as usize) + active_sbox * 4;
+                let c = T::permutation()[idx];
+                state[(i, c)] = 1;
+            }
+        }
+    }
+
+    // reimplement pow here, as matrix does not support One Trait
+    // (and I have no idea how to implement it)
+    let mut exp = rounds;
+    if exp == 1 {state}
+    else {
+        let mut acc = Matrix::one(T::state_size(), T::state_size());
+        while exp > 0 {
+            if (exp & 1) == 1 {
+                acc = acc * state.clone();
+            }
+            state = state.clone() * state.clone();
+            exp >>= 1;
+        }
+        acc
+    }
 }
 

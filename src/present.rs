@@ -6,8 +6,13 @@ use std::ops;
 #[derive(Clone, Debug, PartialEq)]
 pub struct PresentSbox {
     size: usize,
-    elems: Vec<usize>
+    elems: &'static [usize]
 }
+
+static PRESENTSBOX : PresentSbox =
+    PresentSbox {size: 16, elems:
+        &[0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
+          0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2]};
 
 /// sbox lookup, ignores the higher nibble (returns 0x0 in it)
 impl ops::Index<usize> for PresentSbox {
@@ -19,9 +24,7 @@ impl ops::Index<usize> for PresentSbox {
 
 impl Sbox<u64> for PresentSbox {
     fn new() -> Self {
-        PresentSbox {size: 16, elems:
-            vec![0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
-                 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2]}
+        PRESENTSBOX.clone()
     }
 
     fn len(&self) -> usize {
@@ -40,19 +43,21 @@ impl Sbox<u64> for PresentSbox {
 
 /// present permutation
 /// TODO missing Fn Trait implementation to permute whole present state
+#[derive(Clone)]
 pub struct PresentPermutation {
-    // FIXME hack for Index implementation
-    idx: Vec<usize>
+    idx: &'static [usize]
 }
 
-// FIXME hack for Index implementation
+static PRESENTPERMUTATION : PresentPermutation =
+    PresentPermutation {idx:
+        &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+         32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+         48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]};
+
 impl PresentPermutation {
     fn new() -> Self {
-        let mut v = Vec::new();
-        for i in 0..64 {
-            v.push(i);
-        }
-        PresentPermutation {idx: v}
+        PRESENTPERMUTATION.clone()
     }
 }
 
@@ -61,8 +66,8 @@ impl ops::Index<usize> for PresentPermutation {
     fn index<'a>(&'a self, idx: usize) -> &'a usize {
         assert!(idx < 64, "index out of range");
         // TODO hack: how to return the computed index without
-        // using this dumb vector referencing?
-        &self.idx[(idx % 5) * 16 + (idx / 4)]
+        // using this dumb array referencing?
+        &self.idx[(idx % 4) * 16 + (idx / 4)]
     }
 }
 
@@ -93,6 +98,7 @@ impl PresentRoundKey {
     }
 }
 
+#[derive(Clone)]
 pub struct PresentKeySchedule {
     size: usize,
     elems: Vec<PresentRoundKey>
@@ -140,20 +146,23 @@ impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentKeySchedule {
 }
 
 /// Present implements the Cipher Trait, to tie everything together
+#[derive(Clone)]
 pub struct Present {
     state: u64,
-    sbox: PresentSbox,
-    perm: PresentPermutation,
+    sbox: &'static PresentSbox,
+    perm: &'static PresentPermutation,
     keys: PresentKeySchedule
 }
 
-impl Cipher<u64, PresentCipherKey> for Present {
+
+impl Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present {
     fn enc(init: u64, key: PresentCipherKey, rounds: usize) -> u64 {
-        let s = PresentSbox::new();
-        let b = PresentPermutation::new();
         let k = PresentKeySchedule::new(key, rounds);
-        let mut c = Present {state: init, sbox: s, perm: b, keys: k};
-        
+        let mut c = Present {state: init,
+                             sbox: &PRESENTSBOX,
+                             perm: &PRESENTPERMUTATION,
+                             keys: k};
+
         for i in 0..rounds {
             c.kxor_layer(i);
             c.sbox_layer();
@@ -161,6 +170,18 @@ impl Cipher<u64, PresentCipherKey> for Present {
         }
         c.kxor_layer(rounds);
         c.state
+    }
+
+    fn state_size() -> usize {
+        64
+    }
+
+    fn sbox() -> &'static PresentSbox {
+        &PRESENTSBOX
+    }
+
+    fn permutation() -> &'static PresentPermutation {
+        &PRESENTPERMUTATION
     }
 }
 
