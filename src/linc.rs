@@ -50,7 +50,7 @@ where S: Sbox<T> + Index<usize, Output=usize> {
         let row = walsh_transform_row(s, i);
         lat.table.push(row);
     }
-    // the LAT is transposed somehow..
+    // the LAT is transposed somehow.. so revert this here
     for i in 0..lat.table.len()-1 {
         for j in 0..i+1 {
             let a = lat[i][j];
@@ -121,11 +121,19 @@ impl fmt::Display for LAT {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut cnt = 0;
         let mut res = write!(f, "LAT:\n");
-        res = res.and(write!(f, "    0  1  2  3  4  5  6  {}", 
-                                "7  8  9 10 11 12 13 14 15\n"));
+
+        // writen header row
+        res = res.and(write!(f, "   "));
+        for i in 0..self.table.len() {
+            res = res.and(write!(f, "{:>2} ", i));
+        }
+        res = res.and(write!(f, "\n"));
+
         for i in self.table.iter() {
+            // write header column
             res = res.and(write!(f, "{:>2} ", cnt));
             cnt += 1;
+            // write table content
             for &j in i.iter() {
                 res = res.and(
                     if j == 0 {
@@ -148,12 +156,16 @@ impl LAT {
 
 pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
     let mut biased_masks = Vec::new();
-    for &i in [1, 2, 4, 8].iter() {
-        for &j in [1, 2, 4, 8].iter() {
+    let mut i = 1;
+    while i < lat.table.len() {
+        let mut j = 1;
+        while j < lat[0].len() {
             if (*lat)[i][j] != 0 {
                 biased_masks.push((i, j, (*lat)[i][j]));
             }
+            j *= 2;
         }
+        i *= 2;
     }
     biased_masks
 }
