@@ -9,9 +9,7 @@ description = "Collection of Linear Cryptanalysis functions and example implemen
 
 [dependencies]
 num = "*"
-
-[dependencies.generic-matrix]
-git = "https://github.com/pfasante/generic-matrix-rs.git"
+generic-matrix = "*"
 
 [lib]
 name = "linc"

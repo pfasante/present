@@ -13,6 +13,6 @@ fn main() {
 
     let rounds = 10;
     let state_matrix = number_one_bit_trails::<Present, u64, PresentCipherKey, PresentSbox, PresentPermutation>(rounds);
-    println!("computing trails for {} rounds:\n{}", rounds, state_matrix);
+    println!("computing trails for {} rounds:\n{:?}", rounds, state_matrix);
 }
 
