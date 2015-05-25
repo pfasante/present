@@ -1,13 +1,13 @@
-//! collection of function for LINear Cryptanalysis
+//! Collection of function for LINear Cryptanalysis
 //!
-//! every part of a spn cipher is modeled with traits:
-//! Sbox, BitPerm, KeySchedule and State allows us to genericly implement a spn
-//! cipher with its round function. Using this traits, we also implement
-//! functions for walsh-transformation (to examine Sbox'es) and to find linear
+//! Every part of a SPN cipher is modeled with traits:
+//! Sbox, BitPerm, KeySchedule and State allows us to generically implement a SPN
+//! Cipher with its round function. Using this traits, we also implement
+//! functions for Walsh-transformation (to examine S-box'es) and to find linear
 //! trails through the cipher.
 //!
-//! the present module contains implementations of these traits for the PRESENT
-//! cipher.
+//! The present module contains implementations of these traits for the PRESENT
+//! Cipher.
 
 pub mod present;
 
@@ -55,7 +55,7 @@ where S: Sbox<T> + Index<usize, Output=usize> {
         let row = walsh_transform_row(s, i);
         lat.table.push(row);
     }
-    // the LAT is transposed somehow.. so revert this here
+    // the LAT is transposed somehow.. revert this here
     for i in 0..lat.table.len()-1 {
         for j in 0..i+1 {
             let a = lat[i][j];
@@ -103,7 +103,7 @@ fn dot_prod_f2<T>(a: T, b: T) -> T
 where T: PrimInt {
     let n = (a.count_ones() + a.count_zeros()) as usize;
     assert!(n == (b.count_ones() + b.count_zeros()) as usize,
-               "a and b does not have same bitlength?!");
+               "a and b does not have same bit-length?!");
     let mut x = T::zero();
     for i in 0..n {
         x = x ^ (((a >> i) & T::one()) * ((b >> i) & T::one()));
@@ -127,7 +127,7 @@ impl fmt::Display for LAT {
         let mut cnt = 0;
         let mut res = write!(f, "LAT:\n");
 
-        // writen header row
+        // write header row
         res = res.and(write!(f, "   "));
         for i in 0..self.table.len() {
             res = res.and(write!(f, "{:>2} ", i));
@@ -159,6 +159,7 @@ impl LAT {
     }
 }
 
+/// computes a vector holding the biased one bit input output masks
 pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
     let mut biased_masks = Vec::new();
     let mut i = 1;
@@ -175,7 +176,9 @@ pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
     biased_masks
 }
 
-pub fn number_one_bit_trails<T, U, V, S, P>(rounds: usize) -> Matrix<u64>
+/// returns the number of maximal trails for given round, for every
+/// one bit biased linear hull through the cipher.
+pub fn number_one_bit_trails<T, U, V, S, P>(rounds: usize) -> u64
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
     P: 'static + BitPerm,
@@ -197,18 +200,28 @@ where
 
     // reimplement pow here, as matrix does not support One Trait
     // (and I have no idea how to implement it)
+    let mut acc = Matrix::one(T::state_size(), T::state_size());
     let mut exp = rounds;
-    if exp == 1 {state}
-    else {
-        let mut acc = Matrix::one(T::state_size(), T::state_size());
-        while exp > 0 {
-            if (exp & 1) == 1 {
-                acc = acc * state.clone();
-            }
-            state = state.clone() * state.clone();
-            exp >>= 1;
+    while exp > 0 {
+        if (exp & 1) == 1 {
+            acc = acc * state.clone();
         }
-        acc
+        state = state.clone() * state.clone();
+        exp >>= 1;
     }
+
+    // find biggest entry in acc matrix
+    // generic-matrix does not implement iterators,
+    // so access every element per index
+    let mut max = 0;
+    let (row, column) = acc.size();
+    for i in 0..row {
+        for j in 0..column {
+            if acc[(i, j)] > max {
+                max = acc[(i, j)];
+            }
+        }
+    }
+    max
 }
 

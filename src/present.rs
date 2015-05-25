@@ -43,7 +43,7 @@ impl Sbox<u64> for PresentSbox {
 
 /// present permutation
 /// TODO missing Fn Trait implementation to permute whole present state
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PresentPermutation {
     idx: &'static [usize]
 }
@@ -56,6 +56,7 @@ static PRESENTPERMUTATION : PresentPermutation =
          48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]};
 
 impl PresentPermutation {
+    #[allow(dead_code)]
     fn new() -> Self {
         PRESENTPERMUTATION.clone()
     }
@@ -98,7 +99,7 @@ impl PresentRoundKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PresentKeySchedule {
     size: usize,
     elems: Vec<PresentRoundKey>
@@ -146,7 +147,7 @@ impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentKeySchedule {
 }
 
 /// Present implements the Cipher Trait, to tie everything together
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Present {
     state: u64,
     sbox: &'static PresentSbox,
