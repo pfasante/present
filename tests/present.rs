@@ -1,6 +1,8 @@
 extern crate linc;
+extern crate rand;
 use linc::*;
 use linc::present::*;
+use rand::Rand;
 
 #[test]
 fn test_keyschedule() {
@@ -43,28 +45,39 @@ fn test_keyschedule() {
 fn test_encryption() {
     println!("Checking testvectors from PRESENT paper");
 
-    let c = Present::enc(0x0,
-                         PresentCipherKey::new(0x0, 0x0),
-                         31);
+    let c = Present::new(PresentCipherKey::new(0x0, 0x0),
+                         31)
+                    .enc(0x0, 31);
     assert_eq!(0x5579c138_7b228445, c);
     println!("TV1 correct");
-
-    let c = Present::enc(0x0,
-                         PresentCipherKey::new(0xffffffff_ffffffff, 0xffff),
-                         31);
+    let c = Present::new(PresentCipherKey::new(0xffffffff_ffffffff, 0xffff),
+                         31)
+                    .enc(0x0, 31);
     assert_eq!(0xe72c46c0_f5945049, c);
     println!("TV2 correct");
 
-    let c = Present::enc(0xffffffff_ffffffff,
-                         PresentCipherKey::new(0x0, 0x0),
-                         31);
+    let c = Present::new(PresentCipherKey::new(0x0, 0x0),
+                         31)
+                    .enc(0xffffffff_ffffffff, 31);
     assert_eq!(0xa112ffc7_2f68417b, c);
     println!("TV3 correct");
 
-    let c = Present::enc(0xffffffff_ffffffff,
-                         PresentCipherKey::new(0xffffffff_ffffffff, 0xffff),
-                         31);
+    let c = Present::new(PresentCipherKey::new(0xffffffff_ffffffff, 0xffff),
+                         31)
+                    .enc(0xffffffff_ffffffff, 31);
     assert_eq!(0x3333dcd3_213210d2, c);
     println!("TV4 correct");
+}
+
+#[test]
+fn test_enc_dec_is_id() {
+    println!("Check if decryption(encryption(m)) == m");
+    let mut rng = rand::thread_rng();
+    let cipher = Present::new(PresentCipherKey::rand(&mut rng), 31);
+    for _ in 0..1000 {
+        let m = u64::rand(&mut rng);
+        let c = cipher.enc(m, 31);
+        assert_eq!(m, cipher.dec(c, 31));
+    }
 }
 

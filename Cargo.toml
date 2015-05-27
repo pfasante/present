@@ -8,8 +8,9 @@ repository = "https://github.com/pfasante/present"
 description = "Collection of Linear Cryptanalysis functions and example implementation for the PRESENT block chipher"
 
 [dependencies]
-num = "*"
 generic-matrix = "*"
+num = "*"
+rand = "*"
 
 [lib]
 name = "linc"

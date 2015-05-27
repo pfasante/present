@@ -1,5 +1,6 @@
 use super::*;
 use std::ops;
+use rand::{Rand, Rng};
 
 /// PresentSbox implements the PRESENT sbox, by implementing the Sbox trait
 /// a Sbox lookup can than be accomplished by indexing the sbox.
@@ -9,10 +10,15 @@ pub struct PresentSbox {
     elems: &'static [usize]
 }
 
-static PRESENTSBOX : PresentSbox =
+static PRESENTSBOX: PresentSbox =
     PresentSbox {size: 16, elems:
         &[0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd,
           0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2]};
+
+static PRESENTSBOX_INV: PresentSbox =
+    PresentSbox {size: 16, elems:
+        &[0x5, 0xe, 0xf, 0x8, 0xc, 0x1, 0x2, 0xd,
+          0xb, 0x4, 0x6, 0x3, 0x0, 0x7, 0x9, 0xa]};
 
 /// sbox lookup, ignores the higher nibble (returns 0x0 in it)
 impl ops::Index<usize> for PresentSbox {
@@ -48,12 +54,24 @@ pub struct PresentPermutation {
     idx: &'static [usize]
 }
 
-static PRESENTPERMUTATION : PresentPermutation =
+static PRESENTPERMUTATION: PresentPermutation =
     PresentPermutation {idx:
-        &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-         32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-         48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]};
+        &[ 0,16,32,48, 1,17,33,49, 2,18,34,50, 3,19,35,51,
+           4,20,36,52, 5,21,37,53, 6,22,38,54, 7,23,39,55,
+           8,24,40,56, 9,25,41,57,10,26,42,58,11,27,43,59,
+          12,28,44,60,13,29,45,61,14,30,46,62,15,31,47,63]};
+
+static PRESENTPERMUTATION_INV: PresentPermutation =
+    PresentPermutation {idx:
+        &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c,
+          0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c,
+          0x1, 0x5, 0x9, 0xd, 0x11, 0x15, 0x19, 0x1d,
+          0x21, 0x25, 0x29, 0x2d, 0x31, 0x35, 0x39, 0x3d,
+          0x2, 0x6, 0xa, 0xe, 0x12, 0x16, 0x1a, 0x1e,
+          0x22, 0x26, 0x2a, 0x2e, 0x32, 0x36, 0x3a, 0x3e,
+          0x3, 0x7, 0xb, 0xf, 0x13, 0x17, 0x1b, 0x1f,
+          0x23, 0x27, 0x2b, 0x2f, 0x33, 0x37, 0x3b, 0x3f
+         ]};
 
 impl PresentPermutation {
     #[allow(dead_code)]
@@ -79,6 +97,15 @@ impl BitPerm for PresentPermutation {}
 pub struct PresentCipherKey {
     high: u64,
     low: u16
+}
+
+impl Rand for PresentCipherKey {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        PresentCipherKey {
+            high: u64::rand(rng),
+            low: u16::rand(rng),
+        }
+    }
 }
 
 impl PresentCipherKey {
@@ -149,7 +176,6 @@ impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentKeySchedule {
 /// Present implements the Cipher Trait, to tie everything together
 #[derive(Clone, Debug, PartialEq)]
 pub struct Present {
-    state: u64,
     sbox: &'static PresentSbox,
     perm: &'static PresentPermutation,
     keys: PresentKeySchedule
@@ -157,20 +183,33 @@ pub struct Present {
 
 
 impl Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present {
-    fn enc(init: u64, key: PresentCipherKey, rounds: usize) -> u64 {
+    fn new(key: PresentCipherKey, rounds: usize) -> Self {
         let k = PresentKeySchedule::new(key, rounds);
-        let mut c = Present {state: init,
-                             sbox: &PRESENTSBOX,
-                             perm: &PRESENTPERMUTATION,
-                             keys: k};
-
-        for i in 0..rounds {
-            c.kxor_layer(i);
-            c.sbox_layer();
-            c.perm_layer();
+        Present {
+            sbox: &PRESENTSBOX,
+            perm: &PRESENTPERMUTATION,
+            keys: k
         }
-        c.kxor_layer(rounds);
-        c.state
+    }
+
+    fn enc(&self, init: u64, rounds: usize) -> u64 {
+        let mut state = init;
+        for i in 0..rounds {
+            state = self.kxor_layer(state, i);
+            state = self.sbox_layer(state);
+            state = self.perm_layer(state);
+        }
+        self.kxor_layer(state, rounds)
+    }
+
+    fn dec(&self, init: u64, rounds: usize) -> u64 {
+        let mut state = init;
+        for i in (1..rounds+1).rev() {
+            state = self.kxor_layer(state, i);
+            state = self.perm_inv_layer(state);
+            state = self.sbox_inv_layer(state);
+        }
+        self.kxor_layer(state, 0)
     }
 
     fn state_size() -> usize {
@@ -187,25 +226,36 @@ impl Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present 
 }
 
 impl Present {
-    fn kxor_layer(&mut self, round: usize) {
-        self.state = self.keys[round].key ^ self.state;
+    fn kxor_layer(&self, state: u64, round: usize) -> u64 {
+        self.keys[round].key ^ state
     }
 
-    fn sbox_layer(&mut self) {
-        self.state = self.sbox.lookup_state(self.state);
+    fn sbox_layer(&self, state: u64) -> u64 {
+        PRESENTSBOX.lookup_state(state)
     }
 
-    fn perm_layer(&mut self) {
+    fn sbox_inv_layer(&self, state: u64) -> u64 {
+        PRESENTSBOX_INV.lookup_state(state)
+    }
+
+    fn perm_layer(&self, state: u64) -> u64 {
         //self.state = self.perm(self.state);
         let mut perm_state = 0;
-        for j in 0..16 {
-            for i in 0..4 {
-                let old_idx = j *  4 + i;
-                let new_idx = i * 16 + j;
-                perm_state |= (self.state >> old_idx & 0x1) << new_idx;
-            }
+        for old_idx in 0..64 {
+            let new_idx = PRESENTPERMUTATION.idx[old_idx];
+            perm_state |= (state >> old_idx & 0x1) << new_idx;
         }
-        self.state = perm_state;
+        perm_state
+    }
+
+    fn perm_inv_layer(&self, state: u64) -> u64 {
+        //self.state = self.perm(self.state);
+        let mut perm_state = 0;
+        for old_idx in 0..64 {
+            let new_idx = PRESENTPERMUTATION_INV.idx[old_idx];
+            perm_state |= (state >> old_idx & 0x1) << new_idx;
+        }
+        perm_state
     }
 }
 
