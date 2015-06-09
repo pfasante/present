@@ -1,4 +1,7 @@
 *.swp
+cpp/data/*
+cpp/plots/*
+cpp/present
 
 # Compiled files
 *.o
