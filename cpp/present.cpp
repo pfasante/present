@@ -15,10 +15,11 @@
 
 using namespace std;
 
+static const uint64_t NUM_TRAILS[] = {1, 1, 1, 3, 9, 27, 72, 192, 512, 1344, 3528, 9261, 24255, 63525, 166375, 435600, 1140480, 2985984, 7817472, 20466576, 53582633, 140281323, 367261713, 961504803, 2517252696, 6590254272, 17253512704, 45170283840, 118257341400, 309601747125, 810547899975};
 static const uint64_t NUM_MASKS  = sizeof(input_indices) / sizeof(unsigned);
-static const uint64_t NUM_PLAIN  = 20000,
-                      NUM_KEYS   = 100,
-                      NUM_ROUNDS = 10;
+static const uint64_t NUM_PLAIN  = 10000,
+                      NUM_KEYS   = 100000,
+                      NUM_ROUNDS = 5;
 
 typedef array<uint64_t, NUM_ROUNDS+1> round_keys_t;
 typedef array<map<double, int>, NUM_MASKS> bias_histo_t;
@@ -27,6 +28,8 @@ void eval_present(
         shared_ptr<bias_histo_t> histo,
         shared_ptr<array<round_keys_t, NUM_KEYS>> subkey);
 uint64_t present_enc(uint64_t const& plain, round_keys_t const& subkey);
+void print_estimated_mean_var(string name);
+void print_mean_var(shared_ptr<bias_histo_t> histo, string name);
 void print_histo(shared_ptr<bias_histo_t> histo, string name);
 
 int main(int argc, char *argv[])
@@ -67,6 +70,11 @@ int main(int argc, char *argv[])
     independent.join();
     identical.join();
     no_key.join();
+
+    print_estimated_mean_var("data/data_est");
+    print_mean_var(p_histo_indp, "data/data_indp");
+    print_mean_var(p_histo_id, "data/data_id");
+    print_mean_var(p_histo_no, "data/data_no");
 
     print_histo(p_histo_indp, "data/histo_indp");
     print_histo(p_histo_id, "data/histo_id");
@@ -109,8 +117,8 @@ void eval_present(
         // update bias_histogram accordingly
         for (unsigned i = 0; i < NUM_MASKS; ++i)
         {
-            double bias = 0.5 - (key_counter[i]) / (double)(NUM_PLAIN);
-            (*p_histo)[i][bias]++;
+            double bias = (key_counter[i]) / (double)(NUM_PLAIN) - 0.5;
+            (*p_histo)[i][2.0 * bias]++;
             key_counter[i] = 0;
         }
         keys_done++;
@@ -140,6 +148,74 @@ uint64_t present_enc(uint64_t const& plain, round_keys_t const& subkey) {
     // Add round key.
     state ^= subkey[NUM_ROUNDS];
     return state;
+}
+
+void print_estimated_mean_var(string name) {
+    double mean = 0.0;
+    double var = 2.0;
+    var = pow(var, 2*(-2.0 * NUM_ROUNDS - 1.0)) * NUM_TRAILS[NUM_ROUNDS];
+
+    ofstream output(name);
+    if (!output.is_open()) {
+        cout << "fatal error: could not open " << name << endl;
+        return;
+    }
+
+    output << "mean " << mean << endl;
+    output << "var  " << var << endl;
+    output.close();
+}
+
+double weight(map<double, int> const& data) {
+    double weight_sum = 0;
+    for (auto const& x : data) {
+        weight_sum += x.second;
+    }
+    return weight_sum;
+}
+
+double weighted_mean(map<double, int> const& data) {
+    double mean = 0.0;
+    double weight_sum = weight(data);
+    for (auto const& x : data) {
+        mean += x.first * x.second;
+    }
+    return mean / weight_sum;
+}
+
+double weighted_var(map<double, int> const& data) {
+    double var = 0.0;
+    double mean = weighted_mean(data);
+    double weight_sum = weight(data);
+    for (auto const& x : data) {
+        var += pow(x.first - x.second * mean, 2.0);
+        weight_sum += x.second;
+    }
+    return var / weight_sum;
+}
+
+void print_mean_var(shared_ptr<bias_histo_t> p_histo, string name) {
+    double mean = 0.0;
+    for (auto const& histo : (*p_histo)) {
+        mean += weighted_mean(histo);
+    }
+    mean /= p_histo->size();
+
+    double var = 0.0;
+    for (auto const& histo : (*p_histo)) {
+        var += weighted_var(histo);
+    }
+    var /= p_histo->size();
+
+    ofstream output(name);
+    if (!output.is_open()) {
+        cout << "fatal error: could not open " << name << endl;
+        return;
+    }
+
+    output << "mean " << mean << endl;
+    output << "var  " << var << endl;
+    output.close();
 }
 
 void print_histo(shared_ptr<bias_histo_t> p_histo, string name) {
