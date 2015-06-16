@@ -11,15 +11,20 @@
 #include <sstream>
 #include <thread>
 
-#include "Encryption_8bit.inc"
+#include "present_bitsliced.h"
 
 using namespace std;
 
 static const uint64_t NUM_TRAILS[] = {1, 1, 1, 3, 9, 27, 72, 192, 512, 1344, 3528, 9261, 24255, 63525, 166375, 435600, 1140480, 2985984, 7817472, 20466576, 53582633, 140281323, 367261713, 961504803, 2517252696, 6590254272, 17253512704, 45170283840, 118257341400, 309601747125, 810547899975};
+static const uint64_t input_indices[] = {21};
+static const uint64_t output_indices[] = {21};
+
 static const uint64_t NUM_MASKS  = sizeof(input_indices) / sizeof(unsigned);
-static const uint64_t NUM_PLAIN  = 10000,
-                      NUM_KEYS   = 100000,
-                      NUM_ROUNDS = 5;
+static const uint64_t NUM_ROUNDS = 5;
+static const uint64_t NUM_KEYS   = 10000;
+
+// NUM_PLAINS = 1/c^2 * 2 * N_T
+static const uint64_t NUM_PLAIN  = (1 << (4*NUM_ROUNDS)) * 2 * NUM_TRAILS[NUM_ROUNDS-1];
 
 typedef array<uint64_t, NUM_ROUNDS+1> round_keys_t;
 typedef array<map<double, int>, NUM_MASKS> bias_histo_t;
@@ -34,20 +39,18 @@ void print_histo(shared_ptr<bias_histo_t> histo, string name);
 
 int main(int argc, char *argv[])
 {
-    random_device device;
-    mt19937_64 generator(device());
-
     shared_ptr<bias_histo_t> p_histo_indp(new bias_histo_t);
     shared_ptr<bias_histo_t> p_histo_id(new bias_histo_t);
-    shared_ptr<bias_histo_t> p_histo_no(new bias_histo_t);
 
     shared_ptr<array<round_keys_t, NUM_KEYS>> p_indp_subkeys(new array<round_keys_t, NUM_KEYS>);
     shared_ptr<array<round_keys_t, NUM_KEYS>> p_id_subkeys(new array<round_keys_t, NUM_KEYS>);
-    shared_ptr<array<round_keys_t, NUM_KEYS>> p_no_subkeys(new array<round_keys_t, NUM_KEYS>);
 
     cout << "generating random keys...";
+    random_device device;
+    mt19937_64 generator(device());
+
     generate(p_indp_subkeys->begin(), p_indp_subkeys->end(), [&generator]() mutable {
-                array<uint64_t, NUM_ROUNDS+1> key;
+                round_keys_t key;
                 for (auto &k : key) {
                     k = generator();
                 }
@@ -65,20 +68,16 @@ int main(int argc, char *argv[])
 
     thread independent(eval_present, p_histo_indp, p_indp_subkeys);
     thread identical(eval_present, p_histo_id, p_id_subkeys);
-    thread no_key(eval_present, p_histo_no, p_no_subkeys);
 
     independent.join();
     identical.join();
-    no_key.join();
 
     print_estimated_mean_var("data/data_est");
     print_mean_var(p_histo_indp, "data/data_indp");
     print_mean_var(p_histo_id, "data/data_id");
-    print_mean_var(p_histo_no, "data/data_no");
 
     print_histo(p_histo_indp, "data/histo_indp");
     print_histo(p_histo_id, "data/histo_id");
-    print_histo(p_histo_no, "data/histo_no");
 
     return 0;
 }
@@ -93,23 +92,33 @@ void eval_present(
     uint64_t keys_done = 0;
     for (auto const& key : *p_round_keys) {
         uint64_t key_counter[NUM_MASKS] = { 0 };
-        for (uint64_t p = 0; p < NUM_PLAIN; ++p) {
-            uint64_t plain = generator();
-            // encrypt plaintext
-            uint64_t cipher = present_enc(plain, key);
+        for (uint64_t p = 0; p < NUM_PLAIN; p += 64) {
+            // generate 64 plaintexts
+            uint64_t plain[64];
+            uint64_t cipher[64];
+            for (size_t i = 0; i < 64; ++i) {
+                plain[i] = generator();
+                cipher[i] = plain[i];
+            }
 
-            // check, if mask hold
+            // encrypt bitsliced 64 plaintexts
+            encrypt(cipher, key.data(), NUM_ROUNDS);
+
+            // check all 64 plaintext/ciphertext pairs if mask holds
             for (unsigned mask_idx = 0; mask_idx < NUM_MASKS; ++mask_idx)
             {
-                uint64_t input_mask  = (1 << input_indices[mask_idx]);
-                uint64_t output_mask = (1 << output_indices[mask_idx]);
+                uint64_t input_masked  = plain[input_indices[mask_idx]];
+                uint64_t output_masked = cipher[output_indices[mask_idx]];
+                uint64_t equal = ~(input_masked ^ output_masked);
 
-                int bit_in  = (plain  & input_mask)  != 0;
-                int bit_out = (cipher & output_mask) != 0;
-
-                if (bit_in == bit_out) {
-                    key_counter[mask_idx] += 1;
-                }
+                key_counter[mask_idx] += __builtin_popcount(equal & 0xffffffff);
+                key_counter[mask_idx] += __builtin_popcount(equal >> 32);
+                //for (size_t i = 0; i < 64; ++i) {
+                //    if (!(xor_diff & 1)) {
+                //        key_counter[mask_idx] += 1;
+                //    }
+                //    xor_diff >>= 1;
+                //}
             }
         }
 
@@ -126,34 +135,10 @@ void eval_present(
     }
 }
 
-uint64_t present_enc(uint64_t const& plain, round_keys_t const& subkey) {
-    uint64_t state = plain;
-    for (int round = 0; round < NUM_ROUNDS; round++) {
-        // Add round key.
-        state ^= subkey[round];
-
-        // Permutation, SBox.
-        uint64_t temp_0 = pBox8_0[ state       &0xFF];
-        uint64_t temp_1 = pBox8_1[(state >>  8)&0xFF];
-        uint64_t temp_2 = pBox8_2[(state >> 16)&0xFF];
-        uint64_t temp_3 = pBox8_3[(state >> 24)&0xFF];
-        uint64_t temp_4 = pBox8_4[(state >> 32)&0xFF];
-        uint64_t temp_5 = pBox8_5[(state >> 40)&0xFF];
-        uint64_t temp_6 = pBox8_6[(state >> 48)&0xFF];
-        uint64_t temp_7 = pBox8_7[(state >> 56)&0xFF];
-
-        state = temp_0 | temp_1 | temp_2 | temp_3 | temp_4 | temp_5 | temp_6 | temp_7;
-    }
-
-    // Add round key.
-    state ^= subkey[NUM_ROUNDS];
-    return state;
-}
-
 void print_estimated_mean_var(string name) {
     double mean = 0.0;
     double var = 2.0;
-    var = pow(var, 2*(-2.0 * NUM_ROUNDS - 1.0)) * NUM_TRAILS[NUM_ROUNDS];
+    var = pow(var, -4.0 * NUM_ROUNDS) * NUM_TRAILS[NUM_ROUNDS-1];
 
     ofstream output(name);
     if (!output.is_open()) {
