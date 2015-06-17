@@ -3,7 +3,6 @@ use linc::present::*;
 use linc::*;
 
 fn main() {
-    /*
     let sbox = PresentSbox::new();
 
     let lat = walsh_transform(&sbox);
@@ -16,7 +15,6 @@ fn main() {
     let number_trails = number_one_bit_trails::<Present, u64, PresentCipherKey,
         PresentSbox, PresentPermutation>(rounds);
     println!("computing trails for {} rounds: {:?}", rounds, number_trails);
-    */
     let rounds = 31;
     let iterations = 1_000;
     let histo = distribution::<Present, PresentCipherKey, PresentSbox,

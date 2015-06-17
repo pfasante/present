@@ -99,10 +99,6 @@ where
         }
         step *= 2;
     }
-    // scale row by 0.5, we want to compute biases
-    for i in 0..range {
-        row[i] /= 2;
-    }
     // return it
     row
 }
