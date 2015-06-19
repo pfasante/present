@@ -1,3 +1,5 @@
+extern crate rand;
+
 use super::*;
 use std::ops;
 use rand::{Rand, Rng};
@@ -120,6 +122,14 @@ pub struct PresentRoundKey {
     key: u64
 }
 
+impl Rand for PresentRoundKey {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        PresentRoundKey {
+            key: u64::rand(rng),
+        }
+    }
+}
+
 impl PresentRoundKey {
     pub fn new(k: u64) -> Self {
         PresentRoundKey {key: k}
@@ -129,7 +139,7 @@ impl PresentRoundKey {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PresentKeySchedule {
     size: usize,
-    elems: Vec<PresentRoundKey>
+    elems: Vec<PresentRoundKey>,
 }
 
 impl ops::Index<usize> for PresentKeySchedule {
@@ -173,21 +183,76 @@ impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentKeySchedule {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentRandomKeySchedule {
+    size: usize,
+    elems: Vec<PresentRoundKey>,
+}
+
+impl ops::Index<usize> for PresentRandomKeySchedule {
+    type Output = PresentRoundKey;
+    fn index<'a>(&'a self, idx: usize) -> &'a PresentRoundKey {
+        assert!(idx < self.size, "index out of range");
+        &self.elems[idx]
+    }
+}
+
+impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentRandomKeySchedule {
+    fn new(_key: PresentCipherKey, rounds: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut keys = vec![];
+
+        for _ in 0..rounds+1 {
+            keys.push(PresentRoundKey::rand(&mut rng));
+        }
+
+        PresentRandomKeySchedule {size: rounds + 1, elems: keys}
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentIdenticalKeySchedule {
+    size: usize,
+    elems: Vec<PresentRoundKey>,
+}
+
+impl ops::Index<usize> for PresentIdenticalKeySchedule {
+    type Output = PresentRoundKey;
+    fn index<'a>(&'a self, idx: usize) -> &'a PresentRoundKey {
+        assert!(idx < self.size, "index out of range");
+        &self.elems[idx]
+    }
+}
+
+impl KeySchedule<PresentCipherKey, PresentRoundKey> for PresentIdenticalKeySchedule {
+    fn new(_key: PresentCipherKey, rounds: usize) -> Self {
+        let round_key = PresentRoundKey::rand(&mut rand::thread_rng());
+        let mut keys = vec![];
+
+        for _ in 0..rounds+1 {
+            keys.push(round_key.clone());
+        }
+
+        PresentIdenticalKeySchedule {size: rounds + 1, elems: keys}
+    }
+}
+
 /// Present implements the Cipher Trait, to tie everything together
 #[derive(Clone, Debug, PartialEq)]
-pub struct Present {
-    sbox: &'static PresentSbox,
-    perm: &'static PresentPermutation,
-    keys: PresentKeySchedule
+pub struct Present<T: KeySchedule<PresentCipherKey, PresentRoundKey>> {
+    //sbox: &'static PresentSbox,
+    //perm: &'static PresentPermutation,
+    keys: T,
 }
 
 
-impl Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present {
+impl<T: KeySchedule<PresentCipherKey, PresentRoundKey>>
+Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present<T> {
     fn new(key: PresentCipherKey, rounds: usize) -> Self {
-        let k = PresentKeySchedule::new(key, rounds);
+        let k = T::new(key, rounds);
         Present {
-            sbox: &PRESENTSBOX,
-            perm: &PRESENTPERMUTATION,
+            //sbox: &PRESENTSBOX,
+            //perm: &PRESENTPERMUTATION,
             keys: k
         }
     }
@@ -225,7 +290,7 @@ impl Cipher<u64, PresentCipherKey, PresentSbox, PresentPermutation> for Present 
     }
 }
 
-impl Present {
+impl<T: KeySchedule<PresentCipherKey, PresentRoundKey>> Present<T> {
     fn kxor_layer(&self, state: u64, round: usize) -> u64 {
         self.keys[round].key ^ state
     }

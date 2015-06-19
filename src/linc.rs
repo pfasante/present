@@ -264,11 +264,11 @@ where
     result
 }
 
-/// encrypt #iterations random plaintexts for r rounds and
-/// and #iterations random keys
+/// encrypt #n_p random plaintexts for r rounds and
+/// and #n_r random keys
 /// return the distribution of the linear biases
 //pub fn distribution<T, U, K, S, P>(iterations: usize, rounds: usize) -> Vec<(i32, i32)>
-pub fn distribution<T, K, S, P>(iterations: usize, rounds: usize) -> Vec<(f64, i32)>
+pub fn distribution<T, K, S, P>(n_p: usize, n_k: usize, rounds: usize) -> Vec<(f64, i32)>
 where
 // TODO how to keep this generic over the ciphers state?
     //U: Rand,
@@ -286,9 +286,9 @@ where
     }
 
     // count for #iterations, how often the trail holds, i.e. its bias
-    for _ in 0..iterations {
+    for _ in 0..n_k {
         let cipher = T::new(K::rand(&mut rng), rounds);
-        for _ in 0..iterations {
+        for _ in 0..n_p {
             let m = u64::rand(&mut rng);
             let c = cipher.enc(m, rounds);
             for i in 0..biased_masks.len() {
@@ -309,11 +309,13 @@ where
     let mut idx = -1;
     for i in counter {
         if i == prev {
-            let (p, c) = histo[idx];
-            histo[idx] = (p, c + 1);
+            let (corr, c) = histo[idx];
+            histo[idx] = (corr, c + 1);
         } else {
-            let p = 0.5 - (i as f64) / (iterations.pow(2) as f64);
-            histo.push((p, 1));
+            // round correlation to fixed precision
+            let corr = (2.0 * ((i as f64) / (n_p.pow(2) as f64) - 0.5)
+                        * 100000.0).round() / 10000.0;
+            histo.push((corr, 1));
             idx += 1;
             prev = i;
         }
