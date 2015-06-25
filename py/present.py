@@ -1,9 +1,8 @@
 #!/usr/bin/python2
 
-from functools import reduce
 from math import ceil, copysign, log, pow
-from operator import mul
 from sys import argv
+from collections import defaultdict
 
 import random
 
@@ -183,11 +182,7 @@ def numberOfTrails(alpha, beta, rounds, keys=None):
     return trailsWithProb
 
 
-def countTrails(alpha, beta, rounds):
-    """
-    counts the number of trails in a slightly more sophisticated way
-    than numberOfTrails
-    """
+def stateGraph():
     masks = biasedLinApproxOneBit()
     adjmatr = [[0 for _ in range(64)] for _ in range(64)]
     for i in range(64):
@@ -225,24 +220,57 @@ def countTrails(alpha, beta, rounds):
               61, 62, 63]:
         g3matr[i] = adjmatr[i]
 
-    # g1 = graph_from_adjacency_matrix(g1matr, u'', True)
-    # g2 = graph_from_adjacency_matrix(g2matr, u'', True)
-    # g3 = graph_from_adjacency_matrix(g3matr, u'', True)
-    # with open("g1.dot", "w") as f:
-    #     f.write(g1.to_string())
-    # with open("g2.dot", "w") as f:
-    #     f.write(g2.to_string())
-    # with open("g3.dot", "w") as f:
-    #     f.write(g3.to_string())
+    g1 = graph_from_adjacency_matrix(g1matr, u'', True)
+    g2 = graph_from_adjacency_matrix(g2matr, u'', True)
+    g3 = graph_from_adjacency_matrix(g3matr, u'', True)
+    with open("g1.dot", "w") as f:
+        f.write(g1.to_string())
+    with open("g2.dot", "w") as f:
+        f.write(g2.to_string())
+    with open("g3.dot", "w") as f:
+        f.write(g3.to_string())
+
+
+def countTrails(alpha, beta, rounds):
+    """
+    counts the number of trails in a slightly more sophisticated way
+    than numberOfTrails
+    """
+    masks = biasedLinApproxOneBit()
+    adjmatr = [[0 for _ in range(64)] for _ in range(64)]
+    for i in range(64):
+        # update trail here
+        for (a, b, _) in masks:
+            activeSbox = i // 4
+            if (a == 2**(i % 4)):
+                c = permuteIdx(int(log(b, 2)) + activeSbox * 4)
+                adjmatr[c][i] = 1
 
     numpy_retmatr = LA.matrix_power(numpy.matrix(adjmatr), rounds)
-    # print(rounds, log(adjmatr.max(), 2), adjmatr.max())
-    # adjmatr = numpy_retmatr.tolist()
-    # numpy.set_printoptions(linewidth=numpy.nan, threshold=numpy.nan)
-    # # print(numpy_retmatr)
-    # g = graph_from_adjacency_matrix(adjmatr, u'', True)
-    # with open(str(rounds)+"rounds.dot", "w") as f:
-    #     f.write(g.to_string())
+    return numpy_retmatr
+
+
+def count_trails_independent_keys(key, rounds):
+    masks = biasedLinApproxOneBit()
+    adjmatr = [[0 for _ in range(64)] for _ in range(64)]
+    for i in range(64):
+        # update trail here
+        for (a, b, p) in masks:
+            activeSbox = i // 4
+            if (a == 2**(i % 4)):
+                c = permuteIdx(int(log(b, 2)) + activeSbox * 4)
+                adjmatr[c][i] = p / float(2**4)
+    numpy_adjmatr = numpy.matrix(adjmatr)
+    numpy_retmatr = numpy.matrix(numpy.identity(64))
+
+    for _ in range(rounds):
+        key = random.randint(0, (1 << 64)-1)
+        keymatr = [[0 for _ in range(64)] for _ in range(64)]
+        for i in range(64):
+            keymatr[i][i] = (-1)**((key >> i) & 1)
+
+        numpy_keymatr = numpy.matrix(keymatr) * numpy_adjmatr
+        numpy_retmatr = numpy_retmatr * numpy_keymatr
 
     return numpy_retmatr
 
@@ -256,7 +284,7 @@ def count_trails_identical_keys(key, rounds):
             activeSbox = i // 4
             if (a == 2**(i % 4)):
                 c = permuteIdx(int(log(b, 2)) + activeSbox * 4)
-                adjmatr[c][i] = p // 4
+                adjmatr[c][i] = p / float(2**4)
 
     keymatr = [[0 for _ in range(64)] for _ in range(64)]
     for i in range(64):
@@ -266,21 +294,16 @@ def count_trails_identical_keys(key, rounds):
     numpy_keymatr = numpy.matrix(keymatr)
     numpy_retmatr = LA.matrix_power(numpy_adjmatr * numpy_keymatr, rounds)
 
-    numpy.set_printoptions(linewidth=numpy.nan, threshold=numpy.nan)
-
-    # print(numpy_retmatr.max())
-    # print(rounds, log(numpy_retmatr.max(), 2), numpy_retmatr.max())
-
     return numpy_retmatr
 
 
 def graph_from_adjacency_matrix(matrix, node_prefix=u'', directed=False):
     if directed:
-        graph = pydot.Graph(graph_name='G', graph_type='digraph', strict=False,
-                            suppress_disconnected=True)
+        graph = pydot.Graph(graph_name='G', strict=False,
+                            suppress_disconnected=True, graph_type='digraph')
     else:
-        graph = pydot.Graph(graph_name='G', graph_type='graph', strict=False,
-                            suppress_disconnected=True)
+        graph = pydot.Graph(graph_name='G', strict=False,
+                            suppress_disconnected=True, graph_type='graph')
     for i in range(len(matrix)):
         for j in range(len(matrix[i])):
             if matrix[i][j]:
@@ -289,45 +312,11 @@ def graph_from_adjacency_matrix(matrix, node_prefix=u'', directed=False):
 
 ###############################################################################
 
-
-def print_table(L):
-    flat = []
-    for i in L:
-        for j in i:
-            flat.append(j)
-
-    m = 16
-    line = ' '
-
-    for i in range(m):
-        line += ' %2x' % i
-
-    for i, l in enumerate(flat):
-        if not i % m:
-            line += '\n%1x' % (i // m)
-        if l == 0:
-            line += ' ' * 3
-        else:
-            line += ' %2d' % l
-
-    line += '\n'
-    print(line)
-
-
-def naiveLAT(f, domain, image):
-    table = [[0 for i in range(image)] for j in range(domain)]
-    for i in range(domain):
-        for j in range(image):
-            for x in range(domain):
-                table[j][i] += 1 - dotproductF2(i, x) ^ dotproductF2(j, f(x))
-            table[j][i] -= domain // 2
-    return table
-
-
-# def sboxLin(i):
-#     return [0xf, 0xe, 0xb, 0xc, 0x6, 0xd, 0x7, 0x8,
-#             0x0, 0x3, 0x9, 0xa, 0x4, 0x2, 0x1, 0x5][i]
-
+num_trails = [1, 1, 1, 3, 9, 27, 72, 192, 512, 1344, 3528, 9261, 24255, 63525,
+              166375, 435600, 1140480, 2985984, 7817472, 20466576, 53582633,
+              140281323, 367261713, 961504803, 2517252696, 6590254272,
+              17253512704, 45170283840, 118257341400, 309601747125,
+              810547899975]
 
 if __name__ == '__main__':
     rounds = int(argv[1])
@@ -337,89 +326,39 @@ if __name__ == '__main__':
     max_indpcount = numpy_indpmatr.max()
     print("indp", rounds, log(max_indpcount, 2), max_indpcount)
 
-    numpy_retmatr = numpy.matrix([[0 for _ in range(64)] for _ in range(64)])
+    # numpy_retmatr = numpy.matrix([[0 for _ in range(64)] for _ in range(64)])
+    histo_indp = defaultdict(int)
+    histo_id = defaultdict(int)
     for _ in range(number_keys):
         key = random.randint(0, (1 << 64)-1)
-        numpy_temp = count_trails_identical_keys(key, rounds)
-        for i in range(64):
-            for j in range(64):
-                numpy_retmatr[i, j] += numpy_temp[i, j]**2
+        corr = count_trails_identical_keys(key, rounds)[21, 21]
+        corr = float(round(corr * 1000000.0)) / 1000000.0
+        histo_id[corr] += 1
+        corr = count_trails_independent_keys(key, rounds)[21, 21]
+        corr = float(round(corr * 1000000.0)) / 1000000.0
+        histo_indp[corr] += 1
+        # for i in range(64):
+        #     for j in range(64):
+        #         numpy_retmatr[i, j] += numpy_temp[i, j] ** 2
 
-    max_count = numpy_retmatr.max()
-    print("key", rounds, max_count / float(number_keys))
-    print("key", rounds, max_count)
-    # print(numpy_retmatr / float(number_keys))
-    # print(rounds, log(max_count // number_keys, 2), max_count // number_keys)
-    # print(rounds, log(max_count, 2), max_count)
+    with open("data/data_est", "w") as f:
+        f.write("mean 0\n")
+        f.write("var {}\n".format(2**(-4*rounds)*num_trails[rounds-1]))
 
-    for i in range(64):
-        for j in range(64):
-            if numpy_indpmatr.tolist()[i][j] == max_indpcount:
-                print(i, j, "indp", max_indpcount,
-                      "key", numpy_retmatr.tolist()[i][j] / float(number_keys))
-            if numpy_retmatr.tolist()[i][j] == max_count:
-                print(i, j, "indp", numpy_indpmatr.tolist()[i][j],
-                      "key", max_count / float(number_keys))
+    with open("data/histo_id1", "w") as f:
+        for k, v in histo_id.items():
+            f.write("{} {}\n".format(k, v))
 
-#    trails = countTrails(21, 21, int(argv[1]))
-#    print("1. Compute the linear approximation table for the PRESENT S-box")
-#    table = LAT(sbox, 16, 16)
-#    transposed = map(list, zip(*table))
-#    print_table(transposed)
-#
-#    print("2. Find all biased linear approximation with a one bit input and "
-#          "output mask.")
-#    print(biasedLinApproxOneBit())
-#    print("")
-#
-#    print("3. Find a linear characteristic for some rounds with only one "
-#          "active Sbox per round")
-#    trails = linCharacteristics(0x200000, 0x200000, 4)
-#    print([(hex(t[0]), t[1]) for t in trails][0],
-#          "\nout of", len(trails), "trails")
-#    print("")
-#
-#    print("4. Compute its bias.")
-#    biases = map(lambda x: reduce(mul, x),
-#                 [[t[2] for t in ts[1]] for ts in trails])
-#    print("|bias| = sign * pow(2/16, rounds)\nbias =",
-#          copysign(1, list(biases)[0]) * pow(0.125, 4)
-#          )
-#    print("")
-#
-#    print("5. Why do all these characteristic have the same absolute bias?")
-#    print("All one-bit input and output masks have the same absolute bias of "
-#          "1/8, thus every linear characteristic from these masks has the "
-#          "same bias.")
-#    print("")
-#
-#    print("6. For any given one-bit input and output mask: Find the total "
-#          "number of linear characteristics in the linear hull over r rounds "
-#          "with only one active S-box per round.")
-#    if len(argv) > 1:
-#        rounds = int(argv[1])
-#    else:
-#        rounds = 13
-# #    trails = numberOfTrails(21, 21, rounds)
-#    trails = countTrails(21, 21, rounds)
-#    print("rounds", rounds,
-#          "number of trails N_T", trails,
-#          "log N_T", round(log(trails, 2), 2))
-#    print("")
-#
-#    print("7. Execute some experiments to see how the bias is distributed "
-#          "over the keys.")
-#    if len(argv) > 1:
-#        rounds = int(argv[1])
-#    else:
-#        rounds = 10
-#    key = 0x0
-#    trails = numberOfTrails(21, 21, rounds, keyschedule(key))
-#    correlation = 0
-#    for (_, _, p) in trails:
-#        correlation += p
-#    print("rounds", rounds,
-#          "key", hex(key),
-#          "correlation for linear hull", correlation
-#          )
-#    print("")
+    with open("data/histo_indp1", "w") as f:
+        for k, v in histo_indp.items():
+            f.write("{} {}\n".format(k, v))
+
+    # for i in range(64):
+    #     for j in range(64):
+    #         if numpy_indpmatr.tolist()[i][j] == max_indpcount:
+    #             print(i, j, "indp", max_indpcount,
+    #                   "key", numpy_retmatr.tolist()[i][j]
+    #                   / float(number_keys))
+    #         if numpy_retmatr.tolist()[i][j] == max_count:
+    #             print(i, j, "indp", numpy_indpmatr.tolist()[i][j],
+    #                   "key", max_count / float(number_keys))
