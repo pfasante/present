@@ -1,13 +1,16 @@
-//! Collection of function for LINear Cryptanalysis
+//! Collection of functions for LINear Cryptanalysis
 //!
-//! Every part of a SPN cipher is modeled with traits:
-//! Sbox, BitPerm, KeySchedule and State allows us to generically implement a SPN
-//! Cipher with its round function. Using this traits, we also implement
-//! functions for Walsh-transformation (to examine S-box'es) and to find linear
-//! trails through the cipher.
+//! In order to run linear cryptanalysis experiments, we model the relevant
+//! parts of a symmmetric cipher with traits. Our analysis build on SPN constructions.
+//! Thus we interpret a cipher as a SPN, consisting of a key addition, substitution
+//! and permutation layer. These layers are then iterated over several rounds.
 //!
-//! The present module contains implementations of these traits for the PRESENT
-//! Cipher.
+//! We assume, that the substitution layer uses one n to n bit sbox, that is applied in
+//! parallel to the whole block. The permutation layer applies a bit permutation, and
+//! thus we can identify permuted indices of the individual block bits.
+//! These properties are used to build a state transition matrix, which models the
+//! linear bias over one round. Rising this matrix to the r'th power gives us the linear
+//! bias over r rounds. This description also allows to easily include the key dependecy.
 
 pub mod present;
 
@@ -17,15 +20,8 @@ extern crate rand;
 
 use generic_matrix::Matrix;
 use num::traits::PrimInt;
-use rand::{Rand};
 use std::fmt;
 use std::ops::Index;
-
-/// KeySchedule is generic over the initial CipherKey T and the RoundKey U
-pub trait KeySchedule<T, U>: Index<usize, Output=U> {
-    fn new(key: T, rounds: usize) -> Self;
-    //fn index(i: usize) -> T;
-}
 
 pub trait Sbox<T>: Index<usize> {
     fn new() -> Self;
@@ -33,28 +29,23 @@ pub trait Sbox<T>: Index<usize> {
     fn lookup_state(&self, in_state: T) -> T;
     // could be substituted by call(&self, in_state: T)
     //fn index(i: usize) -> T;
+    fn state_size() -> usize;
 }
 
-pub trait BitPerm: Index<usize, Output=usize> {
+pub trait BitPerm<T>: Index<usize, Output=usize> {
+    fn new() -> Self;
+    fn lookup_state(&self, in_state: T) -> T;
     //fn index(i: usize) -> T;
     //fn call(&self, in_state: T) -> T;
-}
-
-/// the ciphers State is generic over the inital state and the ciphers key
-pub trait Cipher<T, C, S: Sbox<T>, P: BitPerm> {
-    fn new(cipher_key: C, rounds: usize) -> Self;
-    fn enc(&self, init: T, rounds: usize) -> T;
-    fn dec(&self, init: T, rounds: usize) -> T;
     fn state_size() -> usize;
-    fn sbox() -> &'static S;
-    fn permutation() -> &'static P;
 }
 
 /// compute the walsh transformation of the given sbox, return it as a LAT
-pub fn walsh_transform<T, S>(s: &S) -> LAT
+pub fn walsh_transform<T, S>() -> LAT
 where
     S: Sbox<T> + Index<usize, Output=usize>
 {
+    let s = &S::new();
     let range = s.len();
     let mut lat = LAT::new();
     for i in 0..range {
@@ -181,21 +172,21 @@ pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
     biased_masks
 }
 
-fn state_graph<T, U, K, S, P>(rounds: usize) -> Matrix<u64>
+fn state_graph<U, S, P>(rounds: usize) -> Matrix<u64>
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
-    P: 'static + BitPerm,
-    T: Cipher<U, K, S, P>
+    P: 'static + BitPerm<U>,
 {
+    let p = P::new();
     // state is an adjacency-matrix for the ciphers state,
     // it has edges for every one bit trail of the ciphers sbox
-    let mut state = Matrix::zero(T::state_size(), T::state_size());
-    for i in 0..T::state_size() {
-        for (a, b, _) in biased_one_bit(&walsh_transform(T::sbox())) {
+    let mut state = Matrix::zero(S::state_size(), S::state_size());
+    for i in 0..S::state_size() {
+        for (a, b, _) in biased_one_bit(&walsh_transform::<U, S>()) {
             let active_sbox = i as usize / 4;
             if a == 2.pow(i as u32 % 4) {
                 let idx = ((b as f64).log(2.0) as usize) + active_sbox * 4;
-                let c = T::permutation()[idx];
+                let c = p[idx];
                 state[(i, c)] = 1;
             }
         }
@@ -203,7 +194,7 @@ where
 
     // reimplement pow here, as matrix does not support One Trait
     // (and I have no idea how to implement it)
-    let mut acc = Matrix::one(T::state_size(), T::state_size());
+    let mut acc = Matrix::one(S::state_size(), S::state_size());
     let mut exp = rounds;
     while exp > 0 {
         if (exp & 1) == 1 {
@@ -218,13 +209,12 @@ where
 
 /// returns the number of maximal trails for given round, for every
 /// one bit biased linear hull through the cipher.
-pub fn number_one_bit_trails<T, U, K, S, P>(rounds: usize) -> u64
+pub fn number_one_bit_trails<U, S, P>(rounds: usize) -> u64
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
-    P: 'static + BitPerm,
-    T: Cipher<U, K, S, P>
+    P: 'static + BitPerm<U>,
 {
-    let mat = state_graph::<T, U, K, S, P>(rounds);
+    let mat = state_graph::<U, S, P>(rounds);
 
     // find biggest entry in acc matrix
     // generic-matrix does not implement iterators,
@@ -244,14 +234,14 @@ where
 // return all combinations for given state length and masks
 //
 // TODO could be written nicer with functional tools: filter and map
-fn all_combinations<T, U, K, S, P>(rounds: usize) -> Vec<(usize, usize)>
+#[allow(dead_code)]
+fn all_combinations<U, S, P>(rounds: usize) -> Vec<(usize, usize)>
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
-    P: 'static + BitPerm,
-    T: Cipher<U, K, S, P>
+    P: 'static + BitPerm<U>,
 {
     let mut result = vec![];
-    let mat = state_graph::<T, U, K, S, P>(rounds);
+    let mat = state_graph::<U, S, P>(rounds);
     let (row, column) = mat.size();
     for i in 0..row {
         for j in 0..column {
@@ -264,61 +254,3 @@ where
     result
 }
 
-/// encrypt #n_p random plaintexts for r rounds and
-/// and #n_r random keys
-/// return the distribution of the linear biases
-//pub fn distribution<T, U, K, S, P>(iterations: usize, rounds: usize) -> Vec<(i32, i32)>
-pub fn distribution<T, K, S, P>(n_p: usize, n_k: usize, rounds: usize) -> Vec<(f64, i32)>
-where
-// TODO how to keep this generic over the ciphers state?
-    //U: Rand,
-    K: Rand,
-    S: 'static + Sbox<u64> + Index<usize, Output=usize>,
-    P: 'static + BitPerm,
-    T: Cipher<u64, K, S, P>
-{
-    // initialize counters for every trail
-    let mut rng = rand::thread_rng();
-    let biased_masks = all_combinations::<T, u64, K, S, P>(rounds);
-    let mut counter = vec![];
-    for _ in 0..biased_masks.len() {
-        counter.push(0);
-    }
-
-    // count for #iterations, how often the trail holds, i.e. its bias
-    for _ in 0..n_k {
-        let cipher = T::new(K::rand(&mut rng), rounds);
-        for _ in 0..n_p {
-            let m = u64::rand(&mut rng);
-            let c = cipher.enc(m, rounds);
-            for i in 0..biased_masks.len() {
-                let (a, b) = biased_masks[i];
-                let bit_in = (m & (a as u64)) != 0;
-                let bit_out = (c & (b as u64)) != 0;
-                if bit_in == bit_out {
-                    counter[i] += 1;
-                }
-            }
-        }
-    }
-
-    // sort biases and create histogram
-    counter.sort();
-    let mut histo = vec![];
-    let mut prev = -1;
-    let mut idx = -1;
-    for i in counter {
-        if i == prev {
-            let (corr, c) = histo[idx];
-            histo[idx] = (corr, c + 1);
-        } else {
-            // round correlation to fixed precision
-            let corr = (2.0 * ((i as f64) / (n_p.pow(2) as f64) - 0.5)
-                        * 100000.0).round() / 10000.0;
-            histo.push((corr, 1));
-            idx += 1;
-            prev = i;
-        }
-    }
-    histo
-}
