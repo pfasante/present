@@ -105,6 +105,11 @@ impl BitPerm<u64> for PresentPermutation {
         out_state
     }
 
+    fn lookup_index(&self, idx: usize) -> usize {
+        let (i, j) = (idx % 4, idx / 4);
+        i * 16 + j
+    }
+
     fn state_size() -> usize {
         64
     }

@@ -35,6 +35,7 @@ pub trait Sbox<T>: Index<usize> {
 pub trait BitPerm<T>: Index<usize, Output=usize> {
     fn new() -> Self;
     fn lookup_state(&self, in_state: T) -> T;
+    fn lookup_index(&self, idx: usize) -> usize;
     //fn index(i: usize) -> T;
     //fn call(&self, in_state: T) -> T;
     fn state_size() -> usize;
@@ -172,7 +173,25 @@ pub fn biased_one_bit(lat: &LAT) -> Vec<(usize, usize, i32)> {
     biased_masks
 }
 
-fn state_graph<U, S, P>(rounds: usize) -> Matrix<u64>
+/// reimplement pow here, as matrix does not support One Trait
+/// (and I have no idea how to implement it)
+fn pow_matrix(mut base: Matrix<u64>, mut exp: usize) -> Matrix<u64> {
+    let (x, y) = base.size();
+    let mut acc = Matrix::one(x, y);
+    while exp > 0 {
+        if (exp & 1) == 1 {
+            acc = acc * base.clone();
+        }
+        base = base.clone() * base.clone();
+        exp >>= 1;
+    }
+
+    acc
+}
+
+/// returns the state matrix for a given sbox and permutation,
+/// used to estimate the linear bias
+pub fn state_matrix<U, S, P>(rounds: usize) -> Matrix<u64>
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
     P: 'static + BitPerm<U>,
@@ -192,30 +211,10 @@ where
         }
     }
 
-    // reimplement pow here, as matrix does not support One Trait
-    // (and I have no idea how to implement it)
-    let mut acc = Matrix::one(S::state_size(), S::state_size());
-    let mut exp = rounds;
-    while exp > 0 {
-        if (exp & 1) == 1 {
-            acc = acc * state.clone();
-        }
-        state = state.clone() * state.clone();
-        exp >>= 1;
-    }
-
-    acc
+    pow_matrix(state, rounds)
 }
 
-/// returns the number of maximal trails for given round, for every
-/// one bit biased linear hull through the cipher.
-pub fn number_one_bit_trails<U, S, P>(rounds: usize) -> u64
-where
-    S: 'static + Sbox<U> + Index<usize, Output=usize>,
-    P: 'static + BitPerm<U>,
-{
-    let mat = state_graph::<U, S, P>(rounds);
-
+pub fn max_entry(mat: Matrix<u64>) -> u64 {
     // find biggest entry in acc matrix
     // generic-matrix does not implement iterators,
     // so access every element per index
@@ -231,24 +230,48 @@ where
     max
 }
 
-// return all combinations for given state length and masks
-//
-// TODO could be written nicer with functional tools: filter and map
-#[allow(dead_code)]
-fn all_combinations<U, S, P>(rounds: usize) -> Vec<(usize, usize)>
+/// returns the key matrix for a given key,
+/// used to estimate the linear bias
+pub fn key_matrix(key: u64) -> Matrix<u64> {
+    let mut keymatrix = Matrix::one(64, 64);
+    for i in 0..64 {
+        keymatrix[(i, i)] = (key >> i) & 1;
+    }
+    keymatrix
+}
+
+/// returns the number of maximal trails for given round, for every
+/// one bit biased linear hull through the cipher, while ignoring
+/// the key influence
+pub fn count_trails<U, S, P>(rounds: usize) -> Matrix<u64>
 where
     S: 'static + Sbox<U> + Index<usize, Output=usize>,
     P: 'static + BitPerm<U>,
 {
-    let mut result = vec![];
-    let mat = state_graph::<U, S, P>(rounds);
-    let (row, column) = mat.size();
-    for i in 0..row {
-        for j in 0..column {
-            if mat[(i, j)] != 0 {
-                result.push((i, j));
-            }
-        }
+    state_matrix::<U, S, P>(rounds)
+}
+
+/// returns the number of maximal trails for given round, for every
+/// one bit biased linear hull through the cipher, using constant
+/// round keys
+pub fn count_trails_const_key<U, S, P>(rounds: usize, key: u64) -> Matrix<u64>
+where
+    S: 'static + Sbox<U> + Index<usize, Output=usize>,
+    P: 'static + BitPerm<U>,
+{
+    pow_matrix(state_matrix::<U, S, P>(1) * key_matrix(key), rounds)
+}
+
+pub fn count_trails_indp_key<U, S, P>(rounds: usize, key: &[u64]) -> Matrix<u64>
+where
+    S: 'static + Sbox<U> + Index<usize, Output=usize>,
+    P: 'static + BitPerm<U>,
+{
+    let mat_state = state_matrix::<U, S, P>(1);
+    let mut result = Matrix::one(64, 64);
+
+    for i in 0..rounds {
+        result = result * (mat_state.clone() * key_matrix(key[i]));
     }
 
     result
