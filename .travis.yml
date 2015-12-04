@@ -2,6 +2,8 @@ language: cpp
 compiler:
   - gcc
 
+sudo: required
+
 # Install dependencies
 install:
   # install g++ 4.8, if tests are run with g++
