@@ -25,12 +25,12 @@ int main(int arc, char **argv) {
 		plaintexts[i] = 0;
 
 	uint64_t *subkeys = (uint64_t *)calloc(64 * (nr+1), sizeof(uint64_t));
-	key_schedule(subkeys, key, nr);
+	present_keyschedule(subkeys, key, nr);
 
 	transpose(tmp, plaintexts, 64, 64);
 
 	for (size_t i=0; i<ntrials; ++i)
-		encrypt(tmp, subkeys, nr);
+		present_encrypt(tmp, subkeys, nr);
 
 	transpose(ciphertexts, tmp, 64, 64);
 
@@ -40,7 +40,7 @@ int main(int arc, char **argv) {
 	for (size_t i=0; i<2; i++)
 	{
 		cout << hex << setfill('0') << setw(16)
-			 << Mirror64(plaintexts[i]) << " " << Mirror64(ciphertexts[i]) << endl;
+			 << mirror64(plaintexts[i]) << " " << mirror64(ciphertexts[i]) << endl;
 	}
 
 	free(subkeys);
