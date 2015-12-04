@@ -1,5 +1,4 @@
-language: rust
+language: c++
 
 script:
-  - cargo build --verbose
-  - cargo test --verbose
+  - make
