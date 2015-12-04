@@ -3,13 +3,31 @@
 #include <iostream>
 #include <iomanip>
 
-extern "C" {
 #include "present_bitslice.h"
-}
+#include "cmdline.h"
 
 using namespace std;
 
-int main(int arc, char **argv) {
+long args_nkeys;
+long args_nplains;
+int args_nthreads;
+
+int main(int argc, char **argv) {
+	gengetopt_args_info args_info;
+	if (cmdline_parser(argc, argv, &args_info) != 0)
+	{
+		cerr << "failed parsing command line arguments" << endl;
+		return EXIT_FAILURE;
+	}
+	args_nkeys = args_info.nkeys_arg;
+	args_nplains = args_info.nplains_arg;
+	args_nthreads = args_info.nthreads_arg;
+
+	cout << "called with args:" << endl;
+	cout << "\tnkeys = " << args_nkeys << endl;
+	cout << "\tnplains = " << args_nplains << endl;
+	cout << "\tnthreads = " << args_nthreads << endl;
+
 	const size_t ntrials = 1;
 
 	uint64_t plaintexts[64];
@@ -44,5 +62,6 @@ int main(int arc, char **argv) {
 	}
 
 	free(subkeys);
+	cmdline_parser_free (&args_info); // release allocated memory
 	return 0;
 }

@@ -10,10 +10,10 @@ build:
 build/%.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-build/main.o: src/main.cpp src/present_bitslice.h
+build/main.o: src/main.cpp src/present_bitslice.h src/cmdline.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
-build/present: build/main.o build/present_bitslice.o
+build/present: build/main.o build/present_bitslice.o build/cmdline.o
 	$(CXX) $(LDFLAGS) $^ -o $@
 
 clean:

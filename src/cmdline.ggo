@@ -1,0 +1,26 @@
+package "present"
+version "0.1"
+purpose "The program runs random experiments on present to test distributions of linear correlations."
+
+# Options
+option  "nkeys"
+		k
+		"number of keys to check"
+		long
+		default="100"
+		optional
+
+option  "nplains"
+		p
+		"number of plain/ciphertext pairs to check"
+		long
+		default="100"
+		optional
+
+option  "nthreads"
+		t
+		"number of threads to utilize for parallel testing"
+		int
+		default="1"
+		optional
+
