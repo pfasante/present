@@ -1,15 +1,15 @@
 language: cpp
 compiler:
-  - gcc
+    - gcc
 
 sudo: required
 
 # Install dependencies
 install:
   # install g++ 4.8, if tests are run with g++
-  - sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-  - sudo apt-get install -qq gcc-4.8
-  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
+    - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+    - sudo apt-get install -qq gcc-4.8
+    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
 
 script:
-  - make
+    - make
