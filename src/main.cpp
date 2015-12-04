@@ -28,6 +28,27 @@ int main(int argc, char **argv) {
 	cout << "\tnplains = " << args_nplains << endl;
 	cout << "\tnthreads = " << args_nthreads << endl;
 
+
+	// TODO
+	// alpha, beta, nkeys_perthread = ceil(nkeys / nthreads)
+	// for nthreads do in parallel
+		// generate nkeys_perthread independent/constant expanded keys
+			// => class expanded_key
+			// independent_expanded_key quasi array<uint64_t, nkeys*nrounds>
+			// constant_expanded_key quasi uint64_t
+			// both overloads operator[] for convenient access
+		// for every key
+			// encrypt ceil(nplains/64)*64 random plain/ciphertext pairs to compute bias
+			// update histogram map accordingly
+		// return histogram
+	// join histograms
+	//
+	// static thread_local std::mt19937 generator;
+	// std::uniform_int_distribution<int> distribution(min,max);
+	// return distribution(generator);
+
+	// TODO
+	// remove old present test code
 	const size_t ntrials = 1;
 
 	uint64_t plaintexts[64];
@@ -62,6 +83,8 @@ int main(int argc, char **argv) {
 	}
 
 	free(subkeys);
+	// TODO old present test code end
+
 	cmdline_parser_free (&args_info); // release allocated memory
 	return 0;
 }
