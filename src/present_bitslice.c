@@ -37,15 +37,6 @@ static inline void present_sbox(uint64_t *Y0, uint64_t *Y1, uint64_t *Y2, uint64
 	*Y1 = T3 ^ T2;
 }
 
-void transpose(uint64_t *out, uint64_t *inp, const size_t out_size, const size_t inp_size) {
-	for (size_t j=0; j<out_size; j++) {
-		out[j] = 0;
-		for (size_t i=0; i<inp_size; i++) {
-			out[j] |= ( ((inp[i]>>(j&63))&1) )<<(i&63);
-		}
-	}
-}
-
 /** Encryption **/
 
 void sBoxLayer(uint64_t *Y, uint64_t *X) {
@@ -108,7 +99,7 @@ void pLayer(uint64_t *X, uint64_t *Y) {
 	X[60] = Y[51],  X[61] = Y[55],  X[62] = Y[59],  X[63] = Y[63];
 }
 
-void encrypt(uint64_t *X, const uint64_t *subkeys, const size_t nr) {
+void present_encrypt(uint64_t *X, const uint64_t *subkeys, const size_t nr) {
 	static uint64_t Y[64];
 	for (size_t i=0; i<nr;i++) {
 		addRoundKey(X, subkeys + (i*64));
@@ -138,7 +129,7 @@ static inline void round_constant(uint64_t *rc, size_t i) {
 	rc[0] = lookup[(i&(1<<4))>>4];
 }
 
-void key_schedule(uint64_t *subkeys, uint64_t *key, const size_t nr) {
+void present_keyschedule(uint64_t *subkeys, uint64_t *key, const size_t nr) {
 	// TODO: The key schedule isn't optimised at all
 	uint64_t *ki = subkeys;
 	uint64_t S[8];
@@ -162,7 +153,16 @@ void key_schedule(uint64_t *subkeys, uint64_t *key, const size_t nr) {
 }
 
 
-uint64_t Mirror64(uint64_t ins) {
+void transpose(uint64_t *out, uint64_t *inp, const size_t out_size, const size_t inp_size) {
+	for (size_t j=0; j<out_size; j++) {
+		out[j] = 0;
+		for (size_t i=0; i<inp_size; i++) {
+			out[j] |= ( ((inp[i]>>(j&63))&1) )<<(i&63);
+		}
+	}
+}
+
+uint64_t mirror64(uint64_t ins) {
 	uint64_t inv_ins = 0;
 	for (int i = 0; i < 64; i++)
 		if ((ins>>i)&1)
