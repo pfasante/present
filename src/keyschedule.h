@@ -32,18 +32,12 @@ template <std::size_t NR>
 Independent_Key<NR>::Independent_Key()
 	: expanded_keys()
 {
-	using namespace std;
-	typedef mt19937::result_type seed_t;
-	typename chrono::system_clock seed_clk;
-	hash<thread::id> h;
+	std::random_device rd;
 
-	auto seed = static_cast<seed_t>(seed_clk.now().time_since_epoch().count());
-	seed += static_cast<seed_t>(h(this_thread::get_id()));
-
-	static thread_local mt19937 generator(seed);
-	uniform_int_distribution<uint64_t> distribution;
+	static thread_local std::mt19937 prng(rd());
+	std::uniform_int_distribution<uint64_t> dist;
 	for (auto & key : expanded_keys)
-		key = distribution(generator);
+		key = dist(prng);
 }
 
 template <std::size_t NR>
@@ -63,17 +57,11 @@ private:
 template <std::size_t NR>
 Constant_Key<NR>::Constant_Key()
 {
-	using namespace std;
-	typedef mt19937::result_type seed_t;
-	typename chrono::system_clock seed_clk;
-	hash<thread::id> h;
+	std::random_device rd;
 
-	auto seed = static_cast<seed_t>(seed_clk.now().time_since_epoch().count());
-	seed += static_cast<seed_t>(h(this_thread::get_id()));
-
-	static thread_local mt19937 generator(seed);
-	uniform_int_distribution<uint64_t> distribution;
-	key = distribution(generator);
+	static thread_local std::mt19937 prng(rd());
+	std::uniform_int_distribution<uint64_t> dist;
+	key = dist(prng);
 }
 
 #endif  // __keyschedule_h__
