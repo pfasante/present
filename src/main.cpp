@@ -1,16 +1,30 @@
 #include <cstdint>
+#include <cstdlib>
 
 #include <iostream>
 #include <iomanip>
+#include <future>
+#include <mutex>
+#include <thread>
+#include <vector>
 
-#include "present_bitslice.h"
 #include "cmdline.h"
+#include "keyschedule.h"
+#include "present_bitslice.h"
 
 using namespace std;
 
+mutex mut_cout;
+
+const int NROUNDS = 5;
 long args_nkeys;
 long args_nplains;
 int args_nthreads;
+
+template<template<size_t> class KEY_T, size_t NR>
+void check_keys(size_t alpha, size_t beta);
+
+void check_old();
 
 int main(int argc, char **argv) {
 	gengetopt_args_info args_info;
@@ -28,6 +42,26 @@ int main(int argc, char **argv) {
 	cout << "\tnplains = " << args_nplains << endl;
 	cout << "\tnthreads = " << args_nthreads << endl;
 
+	size_t alpha = 0, beta = 0;
+
+	vector<future<void>> future_indpmaps;
+	for (int i=0; i<args_nthreads; ++i) {
+		future_indpmaps.push_back(async(launch::async,
+			check_keys<Independent_Key, NROUNDS>, alpha, beta
+			));
+	}
+
+	vector<future<void>> future_constmaps;
+	for (int i=0; i<args_nthreads; ++i) {
+		future_constmaps.push_back(async(launch::async,
+			check_keys<Constant_Key, NROUNDS>, alpha, beta
+			));
+	}
+
+	for (auto & map : future_indpmaps)
+		map.get();
+	for (auto & map : future_constmaps)
+		map.get();
 
 	// TODO
 	// alpha, beta, nkeys_perthread = ceil(nkeys / nthreads)
@@ -47,6 +81,26 @@ int main(int argc, char **argv) {
 	// std::uniform_int_distribution<int> distribution(min,max);
 	// return distribution(generator);
 
+	cmdline_parser_free (&args_info); // release allocated memory
+	return 0;
+}
+
+template<template<size_t> class KEY_T, size_t NR>
+void check_keys(size_t alpha, size_t beta) {
+	KEY_T<NR> expanded_key;
+
+	{	// TODO debug output
+		lock_guard<mutex> lock(mut_cout);
+		cout << this_thread::get_id() << ":" << endl;
+		for (size_t i=0; i<NROUNDS+1; ++i) {
+			cout << "round " << i << ": key = ";
+			cout << hex << setfill('0') << setw(16) << expanded_key[i] << endl;
+		}
+		cout << endl;
+	}
+}
+
+void check_old() {
 	// TODO
 	// remove old present test code
 	const size_t ntrials = 1;
@@ -84,7 +138,5 @@ int main(int argc, char **argv) {
 
 	free(subkeys);
 	// TODO old present test code end
-
-	cmdline_parser_free (&args_info); // release allocated memory
-	return 0;
 }
+
