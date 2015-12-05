@@ -12,6 +12,7 @@ class Expanded_Key
 public:
 	virtual std::uint64_t operator[](std::size_t idx) const = 0;
 	virtual std::uint64_t const operator[](std::size_t idx) = 0;
+	virtual std::uint64_t const* data() = 0;
 };
 
 template <std::size_t NR>
@@ -23,6 +24,7 @@ public:
 
 	std::uint64_t operator[](std::size_t idx) const { return expanded_keys[idx]; };
 	std::uint64_t const operator[](std::size_t idx) { return expanded_keys[idx]; };
+	std::uint64_t const* data() { return expanded_keys.data(); };
 
 private:
 	std::array<std::uint64_t, NR+1> expanded_keys;
@@ -32,6 +34,7 @@ template <std::size_t NR>
 Independent_Key<NR>::Independent_Key()
 	: expanded_keys()
 {
+	// TODO change key representation to bitsliced
 	std::random_device rd;
 
 	static thread_local std::mt19937 prng(rd());
@@ -47,21 +50,26 @@ public:
 	Constant_Key();
 	~Constant_Key() {};
 
-	std::uint64_t operator[](std::size_t idx) const { return key; }
-	std::uint64_t const operator[](std::size_t idx) { return key; }
+	std::uint64_t operator[](std::size_t idx) const { return expanded_keys[idx]; };
+	std::uint64_t const operator[](std::size_t idx) { return expanded_keys[idx]; };
+	std::uint64_t const* data() { return expanded_keys.data(); };
 
 private:
-	std::uint64_t key;
+	std::array<std::uint64_t, NR+1> expanded_keys;
 };
 
 template <std::size_t NR>
 Constant_Key<NR>::Constant_Key()
+	: expanded_keys()
 {
+	// TODO change key representation to bitsliced
 	std::random_device rd;
 
 	static thread_local std::mt19937 prng(rd());
 	std::uniform_int_distribution<uint64_t> dist;
-	key = dist(prng);
+	uint64_t key = dist(prng);
+	for (auto & k : expanded_keys)
+		k = key;
 }
 
 #endif  // __keyschedule_h__

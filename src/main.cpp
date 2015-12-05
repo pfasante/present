@@ -1,11 +1,14 @@
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 
 #include <iostream>
 #include <iomanip>
 #include <future>
+#include <map>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "cmdline.h"
@@ -21,8 +24,10 @@ long args_nkeys;
 long args_nplains;
 int args_nthreads;
 
+pair<map<double, double>, map<double, double>> check_keys(uint64_t alpha, uint64_t beta);
+
 template<template<size_t> class KEY_T, size_t NR>
-void check_keys(size_t alpha, size_t beta);
+map<double, double> experiment(uint64_t alpha, uint64_t beta);
 
 void check_old();
 
@@ -36,68 +41,78 @@ int main(int argc, char **argv) {
 	args_nkeys = args_info.nkeys_arg;
 	args_nplains = args_info.nplains_arg;
 	args_nthreads = args_info.nthreads_arg;
+	cmdline_parser_free (&args_info);
 
-	cout << "called with args:" << endl;
-	cout << "\tnkeys = " << args_nkeys << endl;
-	cout << "\tnplains = " << args_nplains << endl;
-	cout << "\tnthreads = " << args_nthreads << endl;
+	cout << "Start random experiments for correlations with " << args_nkeys << " keys." << endl;
+	cout << "Each correlation is experimentally computed over " << args_nplains << " plain/ciphertext pairs." << endl;
+	cout << "Use " << args_nthreads << " threads for experiments." << endl;
+	cout << endl;
 
-	size_t alpha = 0, beta = 0;
+	uint64_t alpha = 0, beta = 0;
 
-	vector<future<void>> future_indpmaps;
+	vector<future<pair<map<double, double>, map<double, double>>>> future_maps;
 	for (int i=0; i<args_nthreads; ++i) {
-		future_indpmaps.push_back(async(launch::async,
-			check_keys<Independent_Key, NROUNDS>, alpha, beta
-			));
+		future_maps.push_back(async(launch::async, check_keys, alpha, beta));
 	}
 
-	vector<future<void>> future_constmaps;
-	for (int i=0; i<args_nthreads; ++i) {
-		future_constmaps.push_back(async(launch::async,
-			check_keys<Constant_Key, NROUNDS>, alpha, beta
-			));
+	map<double, double> histoindp, histoconst;
+	for (auto & maps : future_maps) {
+		auto mappair = maps.get();
+		for (auto const& entry : mappair.first) {
+			histoindp[entry.first] += entry.second;
+		}
+		for (auto const& entry : mappair.second) {
+			histoindp[entry.first] += entry.second;
+		}
 	}
 
-	for (auto & map : future_indpmaps)
-		map.get();
-	for (auto & map : future_constmaps)
-		map.get();
+	cout << "histoindp:" << endl;
+	for (auto const& entry : histoindp) {
+		cout << entry.first << ": " << entry.second << endl;
+	}
 
-	// TODO
-	// alpha, beta, nkeys_perthread = ceil(nkeys / nthreads)
-	// for nthreads do in parallel
-		// generate nkeys_perthread independent/constant expanded keys
-			// => class expanded_key
-			// independent_expanded_key quasi array<uint64_t, nkeys*nrounds>
-			// constant_expanded_key quasi uint64_t
-			// both overloads operator[] for convenient access
-		// for every key
-			// encrypt ceil(nplains/64)*64 random plain/ciphertext pairs to compute bias
-			// update histogram map accordingly
-		// return histogram
-	// join histograms
-	//
-	// static thread_local std::mt19937 generator;
-	// std::uniform_int_distribution<int> distribution(min,max);
-	// return distribution(generator);
+	cout << "histoconst:" << endl;
+	for (auto const& entry : histoconst) {
+		cout << entry.first << ": " << entry.second << endl;
+	}
 
-	cmdline_parser_free (&args_info); // release allocated memory
-	return 0;
+	// TODO write histograms
+
+	return EXIT_SUCCESS;
+}
+
+pair<map<double, double>, map<double, double>> check_keys(uint64_t alpha, uint64_t beta) {
+	return make_pair<map<double, double>, map<double, double>>(
+			experiment<Independent_Key, NROUNDS>(alpha, beta),
+			experiment<Constant_Key, NROUNDS>(alpha, beta)
+		);
 }
 
 template<template<size_t> class KEY_T, size_t NR>
-void check_keys(size_t alpha, size_t beta) {
-	KEY_T<NR> expanded_key;
+map<double, double> experiment(uint64_t alpha, uint64_t beta) {
+	std::random_device rd;
+	static thread_local std::mt19937 prng(rd());
+	std::uniform_int_distribution<uint64_t> dist;
 
-	{	// TODO debug output
-		lock_guard<mutex> lock(mut_cout);
-		cout << this_thread::get_id() << ":" << endl;
-		for (size_t i=0; i<NROUNDS+1; ++i) {
-			cout << "round " << i << ": key = ";
-			cout << hex << setfill('0') << setw(16) << expanded_key[i] << endl;
+	map<double, double> histo;
+
+	for (size_t i=0; i<ceil(args_nkeys/(double) args_nthreads); ++i) {
+		KEY_T<NR> expanded_key;
+		double ctr = 0;
+		for (size_t j=0; j<ceil(args_nplains/64.0); ++j) {
+			// TODO generate random plaintexts
+			array<uint64_t, 64> plains;
+			for (auto & p : plains)
+				p = dist(prng);
+			array<uint64_t, 64> cipher(plains);
+			//present_encrypt(cipher.data(), expanded_key.data(), NR);
+			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) >> 32));
+			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) && 0xffffffff));
 		}
-		cout << endl;
+		histo[2 * (ctr / args_nplains - 0.5)] += 1;
 	}
+
+	return histo;
 }
 
 void check_old() {
