@@ -13,10 +13,10 @@ build/%.o: src/%.c
 build/%.o: src/%.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
-build/main.o: src/main.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
+build/present.o: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -pthread -c $< -o $@
 
-build/present: build/main.o build/present_bitslice.o build/cmdline.o
+build/present: build/present.o build/present_bitslice.o build/cmdline.o
 	$(CXX) $(LDFLAGS) -pthread $^ -o $@
 
 clean:

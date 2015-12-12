@@ -20,7 +20,12 @@
 
 #include "present_bitslice.h"
 
-static inline void present_sbox(uint64_t *Y0, uint64_t *Y1, uint64_t *Y2, uint64_t *Y3, const uint64_t X0, const uint64_t X1, const uint64_t X2, const uint64_t X3) {
+static inline void sbox_r2(uint64_t *Y0, uint64_t *Y1, uint64_t *Y2, uint64_t *Y3, const uint64_t X0, const uint64_t X1, const uint64_t X2, const uint64_t X3) {
+	register uint64_t T1, T2, T3, T4;
+	// TODO implement r2 sbox
+}
+
+static inline void sbox_present(uint64_t *Y0, uint64_t *Y1, uint64_t *Y2, uint64_t *Y3, const uint64_t X0, const uint64_t X1, const uint64_t X2, const uint64_t X3) {
 	register uint64_t T1, T2, T3, T4;
 	T1 = X2 ^ X1;
 	T2 = X1 & T1;
@@ -40,25 +45,25 @@ static inline void present_sbox(uint64_t *Y0, uint64_t *Y1, uint64_t *Y2, uint64
 /** Encryption **/
 
 void sBoxLayer(uint64_t *Y, uint64_t *X) {
-	present_sbox(Y+ 0,Y+ 1,Y+ 2,Y+ 3, X[ 0],X[ 1],X[ 2],X[ 3]);
-	present_sbox(Y+ 4,Y+ 5,Y+ 6,Y+ 7, X[ 4],X[ 5],X[ 6],X[ 7]);
-	present_sbox(Y+ 8,Y+ 9,Y+10,Y+11, X[ 8],X[ 9],X[10],X[11]);
-	present_sbox(Y+12,Y+13,Y+14,Y+15, X[12],X[13],X[14],X[15]);
-	present_sbox(Y+16,Y+17,Y+18,Y+19, X[16],X[17],X[18],X[19]);
+	sbox_present(Y+ 0,Y+ 1,Y+ 2,Y+ 3, X[ 0],X[ 1],X[ 2],X[ 3]);
+	sbox_present(Y+ 4,Y+ 5,Y+ 6,Y+ 7, X[ 4],X[ 5],X[ 6],X[ 7]);
+	sbox_present(Y+ 8,Y+ 9,Y+10,Y+11, X[ 8],X[ 9],X[10],X[11]);
+	sbox_present(Y+12,Y+13,Y+14,Y+15, X[12],X[13],X[14],X[15]);
+	sbox_present(Y+16,Y+17,Y+18,Y+19, X[16],X[17],X[18],X[19]);
 
-	present_sbox(Y+20,Y+21,Y+22,Y+23, X[20],X[21],X[22],X[23]);
-	present_sbox(Y+24,Y+25,Y+26,Y+27, X[24],X[25],X[26],X[27]);
-	present_sbox(Y+28,Y+29,Y+30,Y+31, X[28],X[29],X[30],X[31]);
-	present_sbox(Y+32,Y+33,Y+34,Y+35, X[32],X[33],X[34],X[35]);
-	present_sbox(Y+36,Y+37,Y+38,Y+39, X[36],X[37],X[38],X[39]);
+	sbox_present(Y+20,Y+21,Y+22,Y+23, X[20],X[21],X[22],X[23]);
+	sbox_present(Y+24,Y+25,Y+26,Y+27, X[24],X[25],X[26],X[27]);
+	sbox_present(Y+28,Y+29,Y+30,Y+31, X[28],X[29],X[30],X[31]);
+	sbox_present(Y+32,Y+33,Y+34,Y+35, X[32],X[33],X[34],X[35]);
+	sbox_present(Y+36,Y+37,Y+38,Y+39, X[36],X[37],X[38],X[39]);
 
-	present_sbox(Y+40,Y+41,Y+42,Y+43, X[40],X[41],X[42],X[43]);
-	present_sbox(Y+44,Y+45,Y+46,Y+47, X[44],X[45],X[46],X[47]);
-	present_sbox(Y+48,Y+49,Y+50,Y+51, X[48],X[49],X[50],X[51]);
-	present_sbox(Y+52,Y+53,Y+54,Y+55, X[52],X[53],X[54],X[55]);
-	present_sbox(Y+56,Y+57,Y+58,Y+59, X[56],X[57],X[58],X[59]);
+	sbox_present(Y+40,Y+41,Y+42,Y+43, X[40],X[41],X[42],X[43]);
+	sbox_present(Y+44,Y+45,Y+46,Y+47, X[44],X[45],X[46],X[47]);
+	sbox_present(Y+48,Y+49,Y+50,Y+51, X[48],X[49],X[50],X[51]);
+	sbox_present(Y+52,Y+53,Y+54,Y+55, X[52],X[53],X[54],X[55]);
+	sbox_present(Y+56,Y+57,Y+58,Y+59, X[56],X[57],X[58],X[59]);
 
-	present_sbox(Y+60,Y+61,Y+62,Y+63, X[60],X[61],X[62],X[63]);
+	sbox_present(Y+60,Y+61,Y+62,Y+63, X[60],X[61],X[62],X[63]);
 }
 
 void addRoundKey(uint64_t *X, const uint64_t *K) {
@@ -141,7 +146,7 @@ void present_keyschedule(uint64_t *subkeys, uint64_t *key, const size_t nr) {
 
 		rotate(key);
 
-		present_sbox(&S[0],&S[1],&S[2],&S[3], key[0], key[1], key[2], key[3]);
+		sbox_present(&S[0],&S[1],&S[2],&S[3], key[0], key[1], key[2], key[3]);
 
 		key[0] = S[0], key[1] = S[1], key[2] = S[2], key[3] = S[3];
 

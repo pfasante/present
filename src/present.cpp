@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 	cout << "Use " << args_nthreads << " threads for experiments." << endl;
 	cout << endl;
 
-	uint64_t alpha = 0, beta = 0;
+	uint64_t alpha = 21, beta = 21;
 
 	vector<future<pair<map<double, double>, map<double, double>>>> future_maps;
 	for (int i=0; i<args_nthreads; ++i) {
@@ -100,12 +100,13 @@ map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 		KEY_T<NR> expanded_key;
 		double ctr = 0;
 		for (size_t j=0; j<ceil(args_nplains/64.0); ++j) {
-			// TODO generate random plaintexts
 			array<uint64_t, 64> plains;
 			for (auto & p : plains)
 				p = dist(prng);
 			array<uint64_t, 64> cipher(plains);
-			//present_encrypt(cipher.data(), expanded_key.data(), NR);
+
+			present_encrypt(cipher.data(), expanded_key.data(), NR);
+
 			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) >> 32));
 			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) && 0xffffffff));
 		}
@@ -113,45 +114,5 @@ map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 	}
 
 	return histo;
-}
-
-void check_old() {
-	// TODO
-	// remove old present test code
-	const size_t ntrials = 1;
-
-	uint64_t plaintexts[64];
-	uint64_t ciphertexts[64];
-	uint64_t tmp[64];
-	uint64_t key[80];
-
-	size_t nr = 31;
-
-	for (size_t i=0;i<80;i++)
-		key[i] = 0;
-	for (size_t i=0; i<64; i++)
-		plaintexts[i] = 0;
-
-	uint64_t *subkeys = (uint64_t *)calloc(64 * (nr+1), sizeof(uint64_t));
-	present_keyschedule(subkeys, key, nr);
-
-	transpose(tmp, plaintexts, 64, 64);
-
-	for (size_t i=0; i<ntrials; ++i)
-		present_encrypt(tmp, subkeys, nr);
-
-	transpose(ciphertexts, tmp, 64, 64);
-
-	cout << "We expect to get the same result in every encryption:" << endl;;
-	if (ntrials==1)
-		cout << "0000000000000000 5579C1387B228445" << endl << endl;
-	for (size_t i=0; i<2; i++)
-	{
-		cout << hex << setfill('0') << setw(16)
-			 << mirror64(plaintexts[i]) << " " << mirror64(ciphertexts[i]) << endl;
-	}
-
-	free(subkeys);
-	// TODO old present test code end
 }
 
