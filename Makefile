@@ -1,4 +1,3 @@
-override CXX := g++-5.1.0
 override CFLAGS := -pedantic -pedantic-errors -Wall -std=c99 -O3 $(CFLAGS)
 override CXXFLAGS := -pedantic -pedantic-errors -Wall -std=c++11 -O3 $(CXXFLAGS)
 override LDFLAGS := -lstdc++ $(LDFLAGS)
