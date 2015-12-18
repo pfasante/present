@@ -13,6 +13,7 @@
 
 #include "cmdline.h"
 #include "keyschedule.h"
+
 #include "present_bitslice.h"
 
 using namespace std;
@@ -24,10 +25,11 @@ long args_nkeys;
 long args_nplains;
 int args_nthreads;
 
+template<typename Sbox>
 pair<map<double, double>, map<double, double>>
 check_keys(uint64_t alpha, uint64_t beta);
 
-template<template<size_t> class KEY_T, size_t NR>
+template<class Sbox, template<size_t> class KEY_T, size_t NR>
 map<double, double>
 experiment(uint64_t alpha, uint64_t beta);
 
@@ -43,9 +45,11 @@ int main(int argc, char **argv) {
 	args_nthreads = args_info.nthreads_arg;
 	cmdline_parser_free (&args_info);
 
-	cout << "Start random experiments for correlations with " << args_nkeys << " keys." << endl;
-	cout << "Each correlation is experimentally computed over " << args_nplains << " plain/ciphertext pairs." << endl;
-	cout << "Use " << args_nthreads << " threads for experiments." << endl;
+	cout << "Start random experiments for correlations." << endl;
+	cout << "Parameter:" << endl;
+	cout << "\t" << args_nkeys << " keys are tested" << endl;
+	cout << "\t" << args_nplains << " plaintexts used for correlation computation" << endl;
+	cout << "\t" << args_nthreads << " threads for splitting workload of experiments" << endl;
 	cout << endl;
 
 	uint64_t alpha = 21, beta = 21;
@@ -53,7 +57,7 @@ int main(int argc, char **argv) {
 	// start threads to run experiments
 	vector<future<pair<map<double, double>, map<double, double>>>> future_maps;
 	for (int i=0; i<args_nthreads; ++i) {
-		future_maps.push_back(async(launch::async, check_keys, alpha, beta));
+		future_maps.push_back(async(launch::async, check_keys<Sbox_Present>, alpha, beta));
 	}
 
 	// get histograms from threads and accumulate them
@@ -88,14 +92,15 @@ int main(int argc, char **argv) {
  * check_keys
  * \brief runs experiments for indpendent and constant round keys
  */
+template<typename Sbox>
 pair<map<double, double>, map<double, double>> check_keys(uint64_t alpha, uint64_t beta) {
 	return make_pair<map<double, double>, map<double, double>>(
-			experiment<Independent_Key, NROUNDS>(alpha, beta),
-			experiment<Constant_Key, NROUNDS>(alpha, beta)
+			experiment<Sbox, Independent_Key, NROUNDS>(alpha, beta),
+			experiment<Sbox, Constant_Key, NROUNDS>(alpha, beta)
 		);
 }
 
-template<template<size_t> class KEY_T, size_t NR>
+template<typename Sbox, template<size_t> class KEY_T, size_t NR>
 map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 	std::random_device rd;
 	static thread_local std::mt19937 prng(rd());
@@ -105,7 +110,6 @@ map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 
 	for (size_t i=0; i<ceil(args_nkeys/(double) args_nthreads); ++i) {
 		KEY_T<NR> expanded_key;
-		cout << i << ": " << expanded_key;
 		double ctr = 0;
 		for (size_t j=0; j<ceil(args_nplains/64.0); ++j) {
 			array<uint64_t, 64> plains;
@@ -113,7 +117,7 @@ map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 				p = dist(prng);
 			array<uint64_t, 64> cipher(plains);
 
-			present_encrypt(cipher.data(), expanded_key.data(), NR);
+			present_encrypt<Sbox>(cipher, expanded_key.data(), NR);
 
 			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) >> 32));
 			ctr += __builtin_popcount(!((plains[alpha] ^ cipher[beta]) && 0xffffffff));

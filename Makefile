@@ -1,3 +1,4 @@
+override CXX := g++-5.1.0
 override CFLAGS := -pedantic -pedantic-errors -Wall -std=c99 -O3 $(CFLAGS)
 override CXXFLAGS := -pedantic -pedantic-errors -Wall -std=c++11 -O3 $(CXXFLAGS)
 override LDFLAGS := -lstdc++ $(LDFLAGS)
@@ -16,7 +17,7 @@ build/%.o: src/%.cpp
 build/present.o: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -pthread -c $< -o $@
 
-build/present: build/present.o build/present_bitslice.o build/cmdline.o
+build/present: build/present.o build/cmdline.o
 	$(CXX) $(LDFLAGS) -pthread $^ -o $@
 
 clean:

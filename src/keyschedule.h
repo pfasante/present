@@ -27,7 +27,7 @@ public:
 /** Independent_Key
  *
  */
-template <std::size_t NR>
+template<std::size_t NR>
 class Independent_Key : Expanded_Key
 {
 public:
@@ -38,14 +38,14 @@ public:
 	//std::array<std::uint64_t, 64> const& operator[](std::size_t idx) const { return expanded_keys[idx]; };
 	std::uint64_t const* data() { return expanded_keys.data(); };
 
-	template <std::size_t NR_>
+	template<std::size_t NR_>
 	friend std::ostream& operator<<(std::ostream& ostr, Independent_Key<NR_> const& key);
 
 private:
 	std::array<std::uint64_t, 64 * (NR+1)> expanded_keys;
 };
 
-template <std::size_t NR>
+template<std::size_t NR>
 Independent_Key<NR>::Independent_Key()
 	: expanded_keys()
 {
@@ -62,7 +62,7 @@ Independent_Key<NR>::Independent_Key()
 	}
 }
 
-template <std::size_t NR>
+template<std::size_t NR>
 std::ostream& operator<<(std::ostream& ostr, Independent_Key<NR> const& key)
 {
 	for (size_t k=0; k<64*(NR+1); k+=64)
@@ -82,7 +82,7 @@ std::ostream& operator<<(std::ostream& ostr, Independent_Key<NR> const& key)
 /** Constant_Key
  *
  */
-template <std::size_t NR>
+template<std::size_t NR>
 class Constant_Key : Expanded_Key
 {
 public:
@@ -93,14 +93,14 @@ public:
 	//std::array<std::uint64_t, 64> const& operator[](std::size_t idx) const { return expanded_keys[idx]; };
 	std::uint64_t const* data() { return expanded_keys.data(); };
 
-	template <std::size_t NR_>
+	template<std::size_t NR_>
 	friend std::ostream& operator<<(std::ostream& ostr, Constant_Key<NR_> const& key);
 
 private:
 	std::array<std::uint64_t, 64 * (NR+1)> expanded_keys;
 };
 
-template <std::size_t NR>
+template<std::size_t NR>
 Constant_Key<NR>::Constant_Key()
 	: expanded_keys()
 {
@@ -115,7 +115,7 @@ Constant_Key<NR>::Constant_Key()
 			expanded_keys[k+i] = -((round_key >> i) & 0x1);
 }
 
-template <std::size_t NR>
+template<std::size_t NR>
 std::ostream& operator<<(std::ostream& ostr, Constant_Key<NR> const& key)
 {
 	uint64_t round_key = 0;
