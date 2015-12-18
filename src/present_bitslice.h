@@ -27,8 +27,8 @@ class Sbox_R2
 {
 public:
 	void operator()(uint64_t &Y0, uint64_t &Y1, uint64_t &Y2, uint64_t &Y3, uint64_t const X0, uint64_t const X1, uint64_t const X2, uint64_t const X3) {
-		register uint64_t T1, T2, T3, T4;
-		T1 = (~X1); T2 = (~X2); T3 = (~X3); T4 = (~X4);
+		register uint64_t T0, T1, T2, T3;
+		T0 = (~X0); T1 = (~X1); T2 = (~X2); T3 = (~X3); T0 = (~X0);
 
 		Y0 = (X0 & T1 & T3) | (T0 & X1 & X2) | (T0 & X1 & T3) | (X0 & T1 & X2) | (T0 & T1 & T2 & X3) | (X0 & X1 & T2 & X3);
 		Y1 = (T0 & X2) | (T0 & X1 & X2) | (T1 & X2 & X3) | (T0 & X1 & X3) | (X0 & T1 & T2 & T3);
