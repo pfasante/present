@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <random>
 #include <thread>
+#include <ios>
+#include <iomanip>
 
 /** Expanded_Key
  * \brief abstract class to describe an interface for an expanded key
@@ -36,6 +38,9 @@ public:
 	//std::array<std::uint64_t, 64> const& operator[](std::size_t idx) const { return expanded_keys[idx]; };
 	std::uint64_t const* data() { return expanded_keys.data(); };
 
+	template <std::size_t NR_>
+	friend std::ostream& operator<<(std::ostream& ostr, Independent_Key<NR_> const& key);
+
 private:
 	std::array<std::uint64_t, 64 * (NR+1)> expanded_keys;
 };
@@ -53,8 +58,24 @@ Independent_Key<NR>::Independent_Key()
 		uint64_t round_key = dist(prng);
 		for (size_t i=0; i<64; ++i)
 			// if the key bit is one, set bitsliced_key to 0xff...ff
-			expanded_keys[k+i] = -((round_key >> 0) & 0x1);
+			expanded_keys[k+i] = -((round_key >> i) & 0x1);
 	}
+}
+
+template <std::size_t NR>
+std::ostream& operator<<(std::ostream& ostr, Independent_Key<NR> const& key)
+{
+	for (size_t k=0; k<64*(NR+1); k+=64)
+	{
+		uint64_t round_key = 0;
+		for (size_t i=0; i<64; ++i)
+			round_key |= ((key.expanded_keys[k+i]) & 0x1) << i;
+		ostr << std::setw(16) << std::setfill('0') << std::hex;
+		ostr << round_key << " ";
+		ostr << std::dec;
+	}
+	ostr << std::endl;
+	return ostr;
 }
 
 
@@ -72,6 +93,9 @@ public:
 	//std::array<std::uint64_t, 64> const& operator[](std::size_t idx) const { return expanded_keys[idx]; };
 	std::uint64_t const* data() { return expanded_keys.data(); };
 
+	template <std::size_t NR_>
+	friend std::ostream& operator<<(std::ostream& ostr, Constant_Key<NR_> const& key);
+
 private:
 	std::array<std::uint64_t, 64 * (NR+1)> expanded_keys;
 };
@@ -88,7 +112,20 @@ Constant_Key<NR>::Constant_Key()
 	for (size_t k=0; k<64*(NR+1); k+=64)
 		for (size_t i=0; i<64; ++i)
 			// if the key bit is one, set bitsliced_key to 0xff...ff
-			expanded_keys[k+i] = -((round_key >> 0) & 0x1);
+			expanded_keys[k+i] = -((round_key >> i) & 0x1);
+}
+
+template <std::size_t NR>
+std::ostream& operator<<(std::ostream& ostr, Constant_Key<NR> const& key)
+{
+	uint64_t round_key = 0;
+	for (size_t i=0; i<64; ++i)
+		// if the key bit is one, set bitsliced_key to 0xff...ff
+		round_key |= ((key.expanded_keys[i]) & 0x1) << i;
+	ostr << std::setw(16) << std::setfill('0') << std::hex;
+	ostr << round_key << " ";
+	ostr << std::dec << std::endl;
+	return ostr;
 }
 
 #endif  // __keyschedule_h__

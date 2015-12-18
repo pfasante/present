@@ -24,12 +24,12 @@ long args_nkeys;
 long args_nplains;
 int args_nthreads;
 
-pair<map<double, double>, map<double, double>> check_keys(uint64_t alpha, uint64_t beta);
+pair<map<double, double>, map<double, double>>
+check_keys(uint64_t alpha, uint64_t beta);
 
 template<template<size_t> class KEY_T, size_t NR>
-map<double, double> experiment(uint64_t alpha, uint64_t beta);
-
-void check_old();
+map<double, double>
+experiment(uint64_t alpha, uint64_t beta);
 
 int main(int argc, char **argv) {
 	gengetopt_args_info args_info;
@@ -50,11 +50,13 @@ int main(int argc, char **argv) {
 
 	uint64_t alpha = 21, beta = 21;
 
+	// start threads to run experiments
 	vector<future<pair<map<double, double>, map<double, double>>>> future_maps;
 	for (int i=0; i<args_nthreads; ++i) {
 		future_maps.push_back(async(launch::async, check_keys, alpha, beta));
 	}
 
+	// get histograms from threads and accumulate them
 	map<double, double> histoindp, histoconst;
 	for (auto & maps : future_maps) {
 		auto mappair = maps.get();
@@ -66,6 +68,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	// output accumulated histograms
 	cout << "histoindp:" << endl;
 	for (auto const& entry : histoindp) {
 		cout << entry.first << ": " << entry.second << endl;
@@ -81,6 +84,10 @@ int main(int argc, char **argv) {
 	return EXIT_SUCCESS;
 }
 
+/**
+ * check_keys
+ * \brief runs experiments for indpendent and constant round keys
+ */
 pair<map<double, double>, map<double, double>> check_keys(uint64_t alpha, uint64_t beta) {
 	return make_pair<map<double, double>, map<double, double>>(
 			experiment<Independent_Key, NROUNDS>(alpha, beta),
@@ -98,6 +105,7 @@ map<double, double> experiment(uint64_t alpha, uint64_t beta) {
 
 	for (size_t i=0; i<ceil(args_nkeys/(double) args_nthreads); ++i) {
 		KEY_T<NR> expanded_key;
+		cout << i << ": " << expanded_key;
 		double ctr = 0;
 		for (size_t j=0; j<ceil(args_nplains/64.0); ++j) {
 			array<uint64_t, 64> plains;
