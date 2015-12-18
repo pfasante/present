@@ -22,4 +22,7 @@ build/present: build/present.o build/cmdline.o
 clean:
 	$(RM) -r build
 
+dist: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h LICENSE README.md Makefile
+	tar cvJpf present.tar.xz src LICENSE Makefile README.md
+
 phony: clean
