@@ -16,6 +16,11 @@
 
 #include "present_bitslice.h"
 
+#ifndef USE_SBOX
+#warning "USE_SBOX not defined, defaulting to standard Present sbox"
+#define USE_SBOX Sbox_Present
+#endif
+
 using namespace std;
 
 const size_t NROUNDS = 5;
@@ -26,7 +31,10 @@ size_t args_key_per_thread;
 
 using Histo = map<double, double>;
 
-template<typename Sbox>
+// taken from bithacks:
+// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+static inline uint32_t popcount(uint32_t v);
+
 pair<Histo, Histo> check_keys(uint64_t alpha, uint64_t beta);
 
 template<class Sbox, template<size_t> class KEY_T, size_t NR>
@@ -48,7 +56,7 @@ int main(int argc, char **argv) {
 	cmdline_parser_free (&args_info);
 
 	// parameter for  5 rounds: 20000 keys,   16777216 plains and 8 threads
-	// parameter for 10 rounds: 20000 keys, 1073741824 plains and 8 threads
+	// parameter for 10 rounds: 20000 keys, 1073741824 plains and 8 threads (runs >48h with 24 threads)
 	cout << "Start random experiments for correlations." << endl;
 	cout << "Parameter:" << endl;
 	cout << "\t" << args_nkeys << " keys are tested" << endl;
@@ -61,7 +69,7 @@ int main(int argc, char **argv) {
 	// start threads to run experiments
 	vector<future<pair<Histo, Histo>>> future_maps;
 	for (size_t i=0; i<args_nthreads; ++i) {
-		future_maps.push_back(async(launch::async, check_keys<Sbox_Present>, alpha, beta));
+		future_maps.push_back(async(launch::async, check_keys, alpha, beta));
 	}
 
 	// get histograms from threads and accumulate them
@@ -90,11 +98,10 @@ int main(int argc, char **argv) {
  * check_keys
  * \brief runs experiments for indpendent and constant round keys
  */
-template<typename Sbox>
 pair<Histo, Histo> check_keys(uint64_t alpha, uint64_t beta) {
 	return make_pair(
-			experiment<Sbox, Independent_Key, NROUNDS>(alpha, beta),
-			experiment<Sbox, Constant_Key, NROUNDS>(alpha, beta)
+			experiment<USE_SBOX, Independent_Key, NROUNDS>(alpha, beta),
+			experiment<USE_SBOX, Constant_Key, NROUNDS>(alpha, beta)
 		);
 }
 
@@ -117,8 +124,10 @@ Histo experiment(uint64_t alpha, uint64_t beta) {
 
 			present_encrypt<Sbox>(cipher, expanded_key.data(), NR);
 
-			ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) >> 32));
-			ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) && 0xffffffff));
+			//ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) >> 32));
+			//ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) & 0xffffffff));
+			ctr += popcount(~((plains[alpha] ^ cipher[beta]) >> 32));
+			ctr += popcount(~((plains[alpha] ^ cipher[beta]) & 0xffffffff));
 		}
 		double correlation = 2*(ctr/(double)args_nplains) - 1;
 		histo[correlation] += 1;
@@ -132,5 +141,12 @@ void write_histo(string const& filename, Histo const& histo) {
 	for (auto const& entry : histo) {
 		out << setprecision(16) << entry.first << " " << entry.second << endl;
 	}
+}
+
+// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+static inline uint32_t popcount(uint32_t v) {
+	v = v - ((v >> 1) & 0x55555555);                        // reuse input as temporary
+	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);         // temp
+	return ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24;  // count
 }
 

@@ -2,7 +2,7 @@ override CFLAGS := -pedantic -pedantic-errors -Wall -std=c99 -O3 $(CFLAGS)
 override CXXFLAGS := -pedantic -pedantic-errors -Wall -std=c++11 -O3 $(CXXFLAGS)
 override LDFLAGS := -lstdc++ $(LDFLAGS)
 
-all: build build/present
+all: build build/present_std build/present_r2
 
 build:
 	mkdir -p build
@@ -13,10 +13,16 @@ build/%.o: src/%.c
 build/%.o: src/%.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
-build/present.o: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -pthread -c $< -o $@
+build/present_r2.o: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
+	$(CXX) $(CPPFLAGS) -DUSE_SBOX=Sbox_R2 $(CXXFLAGS) -pthread -c $< -o $@
 
-build/present: build/present.o build/cmdline.o
+build/present_std.o: src/present.cpp src/present_bitslice.h src/cmdline.h src/keyschedule.h
+	$(CXX) $(CPPFLAGS) -DUSE_SBOX=Sbox_Present $(CXXFLAGS) -pthread -c $< -o $@
+
+build/present_r2: build/present_r2.o build/cmdline.o
+	$(CXX) $(LDFLAGS) -pthread $^ -o $@
+
+build/present_std: build/present_std.o build/cmdline.o
 	$(CXX) $(LDFLAGS) -pthread $^ -o $@
 
 clean:
