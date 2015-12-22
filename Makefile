@@ -1,11 +1,13 @@
-override CFLAGS := -pedantic -pedantic-errors -Wall -std=c99 -O3 $(CFLAGS)
-override CXXFLAGS := -pedantic -pedantic-errors -Wall -std=c++11 -O3 $(CXXFLAGS)
-override LDFLAGS := -lstdc++ $(LDFLAGS)
+override CFLAGS := -pedantic -pedantic-errors -Wall -std=c99 -O3 -flto $(CFLAGS)
+override CXXFLAGS := -pedantic -pedantic-errors -Wall -std=c++11 -O3 -flto $(CXXFLAGS)
+override LDFLAGS := -O3 -flto -lstdc++ $(LDFLAGS)
 
-all: build build/present_std build/present_r2
+
+all: build build/present_std build/present_r2 build/checks
 
 build:
 	mkdir -p build
+
 
 build/%.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
@@ -24,6 +26,14 @@ build/present_r2: build/present_r2.o build/cmdline.o
 
 build/present_std: build/present_std.o build/cmdline.o
 	$(CXX) $(LDFLAGS) -pthread $^ -o $@
+
+
+build/checks.o: src/checks.cpp src/present_bitslice.h
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+build/checks: build/checks.o
+	$(CXX) $(LDFLAGS) $^ -o $@
+
 
 clean:
 	$(RM) -r build

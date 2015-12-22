@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <ios>
 #include <future>
 #include <fstream>
 #include <map>
@@ -124,8 +125,6 @@ Histo experiment(uint64_t alpha, uint64_t beta) {
 
 			present_encrypt<Sbox>(cipher, expanded_key.data(), NR);
 
-			//ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) >> 32));
-			//ctr += __builtin_popcount(~((plains[alpha] ^ cipher[beta]) & 0xffffffff));
 			ctr += popcount(~((plains[alpha] ^ cipher[beta]) >> 32));
 			ctr += popcount(~((plains[alpha] ^ cipher[beta]) & 0xffffffff));
 		}

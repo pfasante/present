@@ -26,7 +26,8 @@
 class Sbox_R2
 {
 public:
-	void operator()(uint64_t &Y0, uint64_t &Y1, uint64_t &Y2, uint64_t &Y3, uint64_t const X0, uint64_t const X1, uint64_t const X2, uint64_t const X3) {
+	void operator()(uint64_t &Y3, uint64_t &Y2, uint64_t &Y1, uint64_t &Y0, uint64_t const X3, uint64_t const X2, uint64_t const X1, uint64_t const X0) {
+		// TODO Sbox_R2(0, 1, 1, 1) != 0, 0, 1, 0
 		uint64_t T0, T1, T2, T3;
 		T0 = (~X0); T1 = (~X1); T2 = (~X2); T3 = (~X3); T0 = (~X0);
 
@@ -41,21 +42,21 @@ public:
 class Sbox_Present
 {
 public:
-	void operator()(uint64_t &Y0, uint64_t &Y1, uint64_t &Y2, uint64_t &Y3, uint64_t const X0, uint64_t const X1, uint64_t const X2, uint64_t const X3) {
+	void operator()(uint64_t &Y3, uint64_t &Y2, uint64_t &Y1, uint64_t &Y0, uint64_t const X3, uint64_t const X2, uint64_t const X1, uint64_t const X0) {
 		uint64_t T1, T2, T3, T4;
-		T1 = X2 ^ X1;
-		T2 = X1 & T1;
-		T3 = X0 ^ T2;
-		Y3 = X3 ^ T3;
+		T1 = X1 ^ X2;
+		T2 = X2 & T1;
+		T3 = X3 ^ T2;
+		Y0 = X0 ^ T3;
 		T2 = T1 & T3;
-		T1 ^= Y3;
-		T2 ^= X1;
-		T4 = X3 | T2;
-		Y2 = T1 ^ T4;
-		T2 ^= (~X3);
-		Y0 = Y2 ^ T2;
+		T1 ^= Y0;
+		T2 ^= X2;
+		T4 = X0 | T2;
+		Y1 = T1 ^ T4;
+		T2 ^= (~X0);
+		Y3 = Y1 ^ T2;
 		T2 |= T1;
-		Y1 = T3 ^ T2;
+		Y2 = T3 ^ T2;
 	}
 };
 
