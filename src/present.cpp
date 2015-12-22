@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 
 	// parameter for  5 rounds: 20000 keys,   16777216 plains and 8 threads
 	// parameter for 10 rounds: 20000 keys, 1073741824 plains and 8 threads (runs >48h with 24 threads)
-	cout << "Start random experiments for correlations." << endl;
+	cout << "Start random experiments for correlations over " << NROUNDS << " rounds." << endl;
 	cout << "Parameter:" << endl;
 	cout << "\t" << args_nkeys << " keys are tested" << endl;
 	cout << "\t" << args_nplains << " plaintexts used for correlation computation" << endl;
